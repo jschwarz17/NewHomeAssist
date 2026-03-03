@@ -40,6 +40,16 @@ Copy `.env.example` to `.env.local` and fill:
 - Add env vars in Vercel: `XAI_API_KEY` (and optionally `GROK_MODEL`).
 - Deploy. Note the URL (e.g. `https://jesse-home-assistant.vercel.app`).
 
+**If you get 404 at your Vercel URL**, fix the project configuration:
+
+1. Open the project on [Vercel Dashboard](https://vercel.com/dashboard) → **Settings** → **General**.
+2. **Framework Preset:** set to **Next.js** (not "Other").
+3. **Root Directory:** leave **empty** (repo root).
+4. Go to **Build & Development Settings** (or **Settings** → same section).
+5. **Output Directory:** leave **empty**. If it is set to `out`, clear it — that folder is only for the Capacitor static build; on Vercel the app is built as standard Next.js (no static export).
+6. **Build Command:** `next build` or leave default.
+7. **Redeploy:** Deployments → ⋯ on latest → **Redeploy** and enable **Clear build cache**.
+
 ### 2. Build frontend for tablet
 
 - Set `NEXT_PUBLIC_ASSISTANT_API_URL` to your Vercel URL (e.g. `https://jesse-home-assistant.vercel.app`).
