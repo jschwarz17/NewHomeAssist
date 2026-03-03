@@ -39,9 +39,10 @@ The app’s `useVoice().getRealtimeToken()` fetches the token; you can then conn
 | Command | Description |
 |--------|-------------|
 | `npm run dev` | Next.js dev server |
-| `npm run build` | Static export → `out/` (for Capacitor) |
+| `npm run build` | Full build (for Vercel; includes API routes) |
+| `npm run build:cap` | Static export → `out/` (for Capacitor only) |
 | `npm run cap:sync` | Sync `out/` to Android project |
-| `npm run cap:android` | Build + sync + open Android Studio |
+| `npm run cap:android` | Static build + sync + open Android Studio |
 
 ## Project layout
 

@@ -36,16 +36,17 @@ Copy `.env.example` to `.env.local` and fill:
 ### 1. Deploy backend (API) to Vercel
 
 - Push the repo and connect it to Vercel.
+- **Do not** set `BUILD_FOR_CAPACITOR` in Vercel — the default build must run without static export so `/api/assistant` and `/api/realtime-token` are deployed as serverless functions.
 - Add env vars in Vercel: `XAI_API_KEY` (and optionally `GROK_MODEL`).
 - Deploy. Note the URL (e.g. `https://jesse-home-assistant.vercel.app`).
 
 ### 2. Build frontend for tablet
 
 - Set `NEXT_PUBLIC_ASSISTANT_API_URL` to your Vercel URL (e.g. `https://jesse-home-assistant.vercel.app`).
-- Build and sync to Android:
+- Build the static export and sync to Android (use `build:cap` so only the static site is built; the tablet calls the Vercel API):
 
 ```bash
-npm run build
+npm run build:cap
 npx cap sync android
 ```
 
