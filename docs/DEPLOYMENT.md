@@ -3,8 +3,8 @@
 ## Architecture
 
 - **Frontend (tablet):** Next.js static export (`out/`) wrapped in Capacitor → runs on Android tablet.
-- **Backend:** Next.js API routes deployed on **Vercel** (Gemini, personalization, Tasker command parsing).
-- **Voice:** Picovoice (Porcupine wake word “Hey Assistant”, Eagle speaker ID: Jesse / Vanessa) runs in the app; STT and assistant logic hit the Vercel API.
+- **Backend:** Next.js API routes deployed on **Vercel** (Grok chat, Grok Voice Agent token, personalization, Tasker command parsing).
+- **Voice:** Picovoice (Porcupine wake phrase “Hi Ara”, Eagle speaker ID: Jesse / Vanessa) runs in the app; STT and assistant hit the Vercel API; Ara's voice via Grok Voice Agent (ephemeral token from `/api/realtime-token`).
 
 ## Development
 
@@ -28,7 +28,7 @@ Open http://localhost:3000. Set `NEXT_PUBLIC_ASSISTANT_API_URL=http://localhost:
 Copy `.env.example` to `.env.local` and fill:
 
 - `NEXT_PUBLIC_PICOVOICE_ACCESS_KEY` – for Porcupine + Eagle.
-- `GEMINI_API_KEY` – for the assistant API (used only on Vercel or when running `next dev` with API).
+- `XAI_API_KEY` – for Grok chat and Grok Voice Agent (used only on Vercel or when running `next dev` with API).
 - `NEXT_PUBLIC_ASSISTANT_API_URL` – **on the tablet build**, set this to your Vercel URL (e.g. `https://jesse-home-assistant.vercel.app`) so the app calls the deployed API.
 
 ## Production
@@ -36,7 +36,7 @@ Copy `.env.example` to `.env.local` and fill:
 ### 1. Deploy backend (API) to Vercel
 
 - Push the repo and connect it to Vercel.
-- Add env vars in Vercel: `GEMINI_API_KEY` (and any others the API needs).
+- Add env vars in Vercel: `XAI_API_KEY` (and optionally `GROK_MODEL`).
 - Deploy. Note the URL (e.g. `https://jesse-home-assistant.vercel.app`).
 
 ### 2. Build frontend for tablet

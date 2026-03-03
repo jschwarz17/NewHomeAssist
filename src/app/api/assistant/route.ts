@@ -3,17 +3,17 @@ import type { SpeakerId } from "@/types/voice";
 
 /**
  * Personal context per speaker (Jesse / Vanessa).
- * In production, load from a DB or env; here we inline for the blueprint.
+ * Ara uses this to personalize responses.
  */
 const JESSE_CONTEXT = `
-You are assisting Jesse. Personalize responses with:
+You are Ara, a warm and friendly home assistant. For this user (Jesse), personalize with:
 - Interests: fintech metrics, GitHub updates, developer workflow.
 - Dietary: no cheese, no dairy.
 - When suggesting food or recipes, avoid dairy and cheese.
 `.trim();
 
 const VANESSA_CONTEXT = `
-You are assisting Vanessa. Personalize responses with:
+You are Ara, a warm and friendly home assistant. For this user (Vanessa), personalize with:
 - Calendar and schedule preferences.
 - Music preferences (e.g. Sonos, playlists).
 - General home and lifestyle.
@@ -26,18 +26,18 @@ function getContextForSpeaker(speakerId: SpeakerId): string {
     case "vanessa":
       return VANESSA_CONTEXT;
     default:
-      return "You are a helpful home assistant. The user has not been identified.";
+      return "You are Ara, a warm and friendly home assistant. The user has not been identified.";
   }
 }
 
 /**
- * Parses Gemini response for a home control command and returns Tasker intent payload.
+ * Parse Ara's response for a home control command and return Tasker intent payload.
  * Action: com.jesse.assistant.COMMAND, Extras: { task, value }
  */
-function parseTaskerCommand(geminiResponse: string): { task: string; value: string } | null {
-  const lower = geminiResponse.toLowerCase();
+function parseTaskerCommand(response: string): { task: string; value: string } | null {
+  const lower = response.toLowerCase();
   if (lower.includes("dim the lights") || lower.includes("dim lights")) {
-    const match = geminiResponse.match(/(\d+)/);
+    const match = response.match(/(\d+)/);
     return { task: "dim_lights", value: match ? match[1] : "50" };
   }
   if (lower.includes("turn on lights") || lower.includes("lights on")) {
@@ -47,11 +47,13 @@ function parseTaskerCommand(geminiResponse: string): { task: string; value: stri
     return { task: "lights", value: "off" };
   }
   if (lower.includes("play") && (lower.includes("sonos") || lower.includes("music"))) {
-    const playWhat = geminiResponse.replace(/^.*(?:play|music)\s*/i, "").trim() || "music";
+    const playWhat = response.replace(/^.*(?:play|music)\s*/i, "").trim() || "music";
     return { task: "sonos_play", value: playWhat };
   }
   return null;
 }
+
+const GROK_CHAT_URL = "https://api.x.ai/v1/chat/completions";
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,41 +68,45 @@ export async function POST(request: NextRequest) {
     }
 
     const context = getContextForSpeaker(speakerId ?? null);
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
         {
-          message: "Gemini API key not configured",
+          message: "Grok API key not configured (XAI_API_KEY)",
           taskerCommand: parseTaskerCommand(transcript) ?? undefined,
         },
         { status: 200 }
       );
     }
 
-    const prompt = `${context}\n\nUser said: "${transcript}"\n\nRespond briefly. If this is a home control command (e.g. dim lights, play Sonos), include the exact phrase so the app can send it to Tasker.`;
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 256 },
-        }),
-      }
-    );
+    const systemContent = `${context}\n\nRespond briefly. If the user gives a home control command (e.g. dim lights, play Sonos), include the exact phrase so the app can send it to Tasker.`;
+
+    const res = await fetch(GROK_CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.GROK_MODEL ?? "grok-3-mini",
+        messages: [
+          { role: "system", content: systemContent },
+          { role: "user", content: transcript },
+        ],
+        max_tokens: 256,
+      }),
+    });
 
     if (!res.ok) {
       const err = await res.text();
       return NextResponse.json(
-        { message: "Gemini API error", detail: err },
+        { message: "Grok API error", detail: err },
         { status: 502 }
       );
     }
 
     const data = await res.json();
-    const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const text = data?.choices?.[0]?.message?.content?.trim() ?? "";
     const taskerCommand = parseTaskerCommand(text);
 
     return NextResponse.json({

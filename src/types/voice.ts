@@ -16,4 +16,6 @@ export interface VoiceContextValue extends VoiceState {
   startListening: () => Promise<void>;
   stopListening: () => void;
   sendToAssistant: (text: string) => Promise<void>;
+  /** Fetch ephemeral token for Grok Voice Agent (wss://api.x.ai/v1/realtime) with voice "Ara" */
+  getRealtimeToken: () => Promise<string | null>;
 }

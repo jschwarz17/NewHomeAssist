@@ -22,7 +22,7 @@ interface VoiceProviderProps {
   children: React.ReactNode;
   /** Picovoice AccessKey (required for Porcupine + Eagle in production) */
   picovoiceAccessKey?: string;
-  /** Backend base URL for Gemini + personalization (e.g. Vercel API) */
+  /** Backend base URL for Ara/Grok + personalization (e.g. Vercel API) */
   apiBaseUrl?: string;
 }
 
@@ -53,8 +53,8 @@ export function VoiceProvider({
         return;
       }
 
-      // TODO: Initialize Porcupine for wake word "Hey Assistant"
-      // - Use @picovoice/web-porcupine or picovoice SDK; keyword "Hey Assistant" (custom or built-in).
+      // TODO: Initialize Porcupine for wake phrase "Hi Ara"
+      // - Use @picovoice/web-porcupine or picovoice SDK; custom keyword "Hi Ara".
       // - On keyword detection → setWakeWordDetected(true) and start Eagle enrollment/identification.
 
       // TODO: Initialize Eagle for speaker identification (Jesse vs Vanessa)
@@ -110,6 +110,17 @@ export function VoiceProvider({
     [apiBaseUrl, speakerId]
   );
 
+  const getRealtimeToken = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/realtime-token`, { method: "POST" });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data?.client_secret?.value ?? data?.value ?? null;
+    } catch {
+      return null;
+    }
+  }, [apiBaseUrl]);
+
   useEffect(() => {
     return () => {
       stopListening();
@@ -125,6 +136,7 @@ export function VoiceProvider({
     startListening,
     stopListening,
     sendToAssistant,
+    getRealtimeToken,
   };
 
   return (
