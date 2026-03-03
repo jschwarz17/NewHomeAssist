@@ -20,11 +20,14 @@ export function useVoice() {
 
 interface VoiceProviderProps {
   children: React.ReactNode;
-  /** Picovoice AccessKey (required for Porcupine + Eagle in production) */
+  /** Picovoice AccessKey (required for Porcupine in production) */
   picovoiceAccessKey?: string;
   /** Backend base URL for Ara/Grok + personalization (e.g. Vercel API) */
   apiBaseUrl?: string;
 }
+
+const PORCUPINE_MODEL = { publicPath: "/porcupine_params.pv" };
+const WAKE_WORD_LABEL = "hi_ara";
 
 export function VoiceProvider({
   children,
@@ -37,40 +40,105 @@ export function VoiceProvider({
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const porcupineRef = useRef<unknown>(null);
-  const eagleRef = useRef<unknown>(null);
+  const porcupineRef = useRef<InstanceType<typeof import("@picovoice/porcupine-web").Porcupine> | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const startListening = useCallback(async () => {
     setError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+    setWakeWordDetected(false);
+    setTranscript("");
 
+    try {
       if (!picovoiceAccessKey) {
         setError("Picovoice access key not configured. Add NEXT_PUBLIC_PICOVOICE_ACCESS_KEY.");
         setIsListening(true);
         return;
       }
 
-      // TODO: Initialize Porcupine for wake phrase "Hi Ara"
-      // - Use @picovoice/web-porcupine or picovoice SDK; custom keyword "Hi Ara".
-      // - On keyword detection → setWakeWordDetected(true) and start Eagle enrollment/identification.
+      const { Porcupine, BuiltInKeyword } = await import("@picovoice/porcupine-web");
+      const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
 
-      // TODO: Initialize Eagle for speaker identification (Jesse vs Vanessa)
-      // - Use @picovoice/eagle-web or Eagle SDK; enroll/identify from same audio stream.
-      // - On identification → setSpeakerId('jesse' | 'vanessa').
+      const keywordDetectionCallback = (detection: { label: string }) => {
+        setWakeWordDetected(true);
+        startSpeechRecognition();
+      };
 
-      // TODO: After wake word + speaker ID, capture next N seconds and send to STT (e.g. Web Speech API or cloud STT).
-      // - Set result in setTranscript(...).
+      let porcupine;
+      try {
+        porcupine = await Porcupine.create(
+          picovoiceAccessKey,
+          [{ publicPath: "/hi_ara.ppn", label: WAKE_WORD_LABEL, sensitivity: 0.5 }],
+          keywordDetectionCallback,
+          PORCUPINE_MODEL,
+          { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
+        );
+      } catch {
+        porcupine = await Porcupine.create(
+          picovoiceAccessKey,
+          [{ builtin: BuiltInKeyword.Porcupine, sensitivity: 0.5 }],
+          keywordDetectionCallback,
+          PORCUPINE_MODEL,
+          { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
+        );
+      }
 
+      porcupineRef.current = porcupine;
+      await WebVoiceProcessor.subscribe(porcupine);
       setIsListening(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start microphone");
+      const msg = e instanceof Error ? e.message : "Failed to start wake word";
+      setError(msg);
+      console.error("[VoiceProvider] startListening", e);
     }
   }, [picovoiceAccessKey]);
 
-  const stopListening = useCallback(() => {
+  function startSpeechRecognition() {
+    if (typeof window === "undefined") return;
+    const SpeechRecognitionAPI = (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
+      ?? (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      setError("Speech recognition not supported in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const result = event.results[event.results.length - 1];
+      const text = result[0]?.transcript?.trim();
+      if (text) {
+        setTranscript(text);
+      }
+    };
+    recognition.onerror = () => {};
+    recognition.onend = () => {
+      recognitionRef.current = null;
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
+  }
+
+  const stopListening = useCallback(async () => {
+    try {
+      const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
+      if (porcupineRef.current) {
+        await WebVoiceProcessor.unsubscribe(porcupineRef.current);
+        await porcupineRef.current.release();
+        porcupineRef.current = null;
+      }
+    } catch {
+      // ignore
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -145,3 +213,4 @@ export function VoiceProvider({
     </VoiceContext.Provider>
   );
 }
+

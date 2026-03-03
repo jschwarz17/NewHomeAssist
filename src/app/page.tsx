@@ -1,3 +1,5 @@
+import { VoicePanel } from "@/components/VoicePanel";
+
 export default function HomePage() {
   return (
     // MAIN CONTAINER: Pure black background, full-height, white text
@@ -50,6 +52,11 @@ export default function HomePage() {
           </div>
         </section>
       </div>
+
+      {/* Voice: start listening, then say "Hi Ara" or "Porcupine" */}
+      <section className="mt-8 max-w-xl">
+        <VoicePanel />
+      </section>
 
       {/* FOOTER AREA (For Voice Feedback) */}
       <footer className="fixed bottom-0 left-0 right-0 p-6 bg-black border-t border-zinc-900 mt-10">

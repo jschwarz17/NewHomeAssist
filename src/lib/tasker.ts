@@ -24,7 +24,7 @@ export async function sendTaskerCommand(task: string, value: string): Promise<vo
   const cap = (window as unknown as { Capacitor?: { isNativePlatform: () => boolean } }).Capacitor;
   if (!cap?.isNativePlatform?.()) {
     if (process.env.NODE_ENV === "development") {
-      console.log("[Tasker] (web) would send:', { task, value }");
+      console.log("[Tasker] (web) would send:", { task, value });
     }
     return;
   }

@@ -18,7 +18,7 @@ export function VoicePanel() {
     <div className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-6 space-y-4">
       <h3 className="text-sm font-medium text-zinc-300">Voice</h3>
       <p className="text-xs text-zinc-500">
-        Wake phrase: &quot;Hi Ara&quot;. Speaker ID: Jesse or Vanessa.
+        Say &quot;Hi Ara&quot; (or &quot;Porcupine&quot; if no custom keyword) after starting. Then say your command; use Send to assistant when ready.
       </p>
 
       <div className="flex items-center gap-3 flex-wrap">

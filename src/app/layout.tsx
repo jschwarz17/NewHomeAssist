@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AppHeaderTitle } from "@/components/AppHeaderTitle";
 import { Nav } from "@/components/Nav";
 import { VoiceProviderWrapper } from "@/components/VoiceProviderWrapper";
 import "./globals.css";
@@ -33,9 +34,7 @@ export default function RootLayout({
         <VoiceProviderWrapper>
           <div className="min-h-screen flex flex-col">
             <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-              <Link href="/" className="text-xl font-semibold tracking-tight">
-                Jesse Home Assistant
-              </Link>
+              <AppHeaderTitle />
               <Nav />
             </header>
             {children}

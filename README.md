@@ -21,7 +21,7 @@ Personalized AI home assistant: hybrid **Next.js + Capacitor** Android app for a
 3. **Development:** `npm run dev` → http://localhost:3000
 4. **Tablet build:** `npm run cap:android` (builds, syncs to Android, opens Android Studio)
 
-See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for live reload on tablet, Vercel deploy, and Tasker intent setup.
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for live reload on tablet and Vercel deploy. See **[docs/TASKER_SETUP.md](docs/TASKER_SETUP.md)** for Tasker. See **[docs/PICOVOICE_HI_ARA.md](docs/PICOVOICE_HI_ARA.md)** for the "Hi Ara" custom wake word.
 
 ## Ara’s voice (Grok Voice Agent)
 
@@ -51,7 +51,8 @@ The app’s `useVoice().getRealtimeToken()` fetches the token; you can then conn
 | `src/context/VoiceProvider.tsx` | Porcupine (“Hi Ara”) + Eagle (speaker ID) + STT flow; `getRealtimeToken()` for Voice Agent |
 | `src/app/api/assistant/route.ts` | Grok chat + Jesse/Vanessa context + Tasker command parsing |
 | `src/app/api/realtime-token/route.ts` | Ephemeral token for Grok Voice Agent (Ara’s voice) |
-| `src/lib/tasker.ts` | Send Intent `com.jesse.assistant.COMMAND` with `task`, `value` |
+| `src/lib/tasker.ts` | Send Intent via Tasker plugin; see [TASKER_SETUP.md](docs/TASKER_SETUP.md) |
+| `android/.../TaskerPlugin.java` | Broadcasts `com.jesse.assistant.COMMAND` for Tasker |
 | `capacitor.config.ts` | App ID `com.jesse.assistant`, webDir `out`, Android scheme + cleartext |
 | `next.config.ts` | `output: 'export'`, `images.unoptimized`, `trailingSlash` |
 

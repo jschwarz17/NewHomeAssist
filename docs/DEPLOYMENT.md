@@ -71,8 +71,8 @@ npm run cap:android
 ### 3. Tasker (Android)
 
 - The app sends intents with action `com.jesse.assistant.COMMAND` and extras `task`, `value`.
-- In Tasker, create a profile that reacts to this intent and runs the desired tasks (e.g. dim lights, Sonos).
-- The native Android project must implement a Capacitor plugin that broadcasts this intent (see `src/lib/tasker.ts` and the fallback warning there). Implement the plugin in `android/` and register it so `Tasker.sendCommand({ task, value })` performs the broadcast.
+- A **Tasker plugin** is included: `android/.../TaskerPlugin.java` broadcasts this intent; `MainActivity` registers it. After you run the app from Android Studio (or build a new APK), the app will call Tasker via the plugin when the API returns a `taskerCommand`.
+- On the tablet, in **Tasker**, create a profile: **Event** → **Intent Received** → Action `com.jesse.assistant.COMMAND`. Use `%task` and `%value` in your task. See **[docs/TASKER_SETUP.md](TASKER_SETUP.md)** for step-by-step and examples.
 
 ## Summary
 
