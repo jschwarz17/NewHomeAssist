@@ -35,7 +35,7 @@ function buildVoiceInstructions(speakerId: SpeakerId, memories: string[]): strin
   else if (speakerId === "vanessa") base += " User is Vanessa (calendar, music, lifestyle). Always start your reply with 'Hey Vanessa'.";
   else base += " Be friendly and concise.";
 
-  base += " You have a store_memory tool. When the user asks you to remember something, use it. Confirm you've stored it.";
+  base += " You have a store_memory tool — use it aggressively. ANY time a user shares personal information (names, preferences, facts about their life, pet names, family details, allergies, routines, languages, important dates) or says anything like 'remember', 'don't forget', 'I want you to know', 'I want to teach you', 'learn this', or corrects you about a fact — call store_memory immediately. When in doubt, store it. After storing, briefly confirm what you remembered.";
 
   if (memories.length > 0) {
     base += "\n\nThings you remember from past conversations:\n" + memories.map((m) => `- ${m}`).join("\n");

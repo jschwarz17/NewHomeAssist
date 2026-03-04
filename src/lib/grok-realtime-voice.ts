@@ -48,14 +48,22 @@ const STORE_MEMORY_TOOL = {
   type: "function",
   name: "store_memory",
   description:
-    "Store a fact, preference, or piece of information that the user wants you to remember for future conversations. " +
-    "Call this whenever the user says 'remember', 'don't forget', 'keep in mind', or expresses something they want retained.",
+    "Store a fact, preference, name, or piece of personal information that the user wants you to remember across conversations. " +
+    "Call this tool whenever the user:\n" +
+    "- Explicitly says 'remember', 'don't forget', 'keep in mind', 'note that'\n" +
+    "- Teaches you something: 'I want to teach you', 'I want you to learn', 'I want you to know', 'let me tell you about'\n" +
+    "- Shares personal facts: names (their name, spouse, kids, pets), preferences (food, language, allergies), " +
+    "important dates (birthdays, anniversaries), routines, nicknames, or any detail about their life or household\n" +
+    "- Corrects you: 'actually my name is...', 'no, it's...'\n" +
+    "- States something they clearly expect you to retain for the future\n\n" +
+    "When in doubt, store it. It's always better to remember too much than too little. " +
+    "Write the memory as a clear, concise factual statement.",
   parameters: {
     type: "object",
     properties: {
       text: {
         type: "string",
-        description: "The fact or information to remember, written as a clear statement.",
+        description: "A clear factual statement of what to remember, e.g. 'Jesse's dog is named Bruno' or 'Vanessa prefers to be spoken to in Spanish'.",
       },
     },
     required: ["text"],

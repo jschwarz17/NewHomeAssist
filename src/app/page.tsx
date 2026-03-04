@@ -15,7 +15,7 @@ export default function HomePage() {
       </h1>
 
       {/* Dashboard grid: 3 columns — Jesse | Vane | Voice */}
-      <div className="flex-1 grid grid-cols-[1fr_1fr_280px] gap-x-6 min-h-0">
+      <div className="flex-1 grid grid-cols-[1fr_1fr_140px] gap-x-6 min-h-0">
         {/* LEFT: Jesse */}
         <section className="flex flex-col gap-3 min-h-0 overflow-y-auto pr-3 border-r border-zinc-800">
           <h2 className="text-sm font-light text-zinc-400 tracking-wide uppercase">
