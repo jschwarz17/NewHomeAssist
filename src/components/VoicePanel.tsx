@@ -25,6 +25,10 @@ export function VoicePanel() {
           : "Say \"Hey Ara\" to start a voice conversation with Ara. Tap End to return to wake-word listening."}
       </p>
 
+      {error && (
+        <p className="text-red-400 text-sm">{error}</p>
+      )}
+
       <div className="flex items-center gap-3 flex-wrap">
         {!wakeWordUnavailable && !voiceSessionActive && (
           <button
@@ -68,9 +72,6 @@ export function VoicePanel() {
         )}
       </div>
 
-      {error && (
-        <p className="text-red-400 text-sm">{error}</p>
-      )}
     </div>
   );
 }
