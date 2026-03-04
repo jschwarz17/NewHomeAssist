@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { openLink } from "@/lib/open-link";
 
-type Shoe = { imageUrl: string; link: string; credit?: string };
+type Shoe = { imageUrl: string; link: string; credit?: string; label?: string };
 
 function getWidgetsBase(): string {
   if (typeof window === "undefined") return "";
@@ -48,19 +48,24 @@ export function ElegantShoesWidget() {
           ))}
         </div>
       ) : (
-        <div className="flex gap-2 justify-center flex-wrap">
+        <div className="flex gap-3 justify-center flex-wrap">
           {display.slice(0, 6).map((shoe, i) => (
             <button
               key={i}
               type="button"
               onClick={() => openLink(shoe.link)}
-              className="block"
+              className="block w-24 text-center"
             >
               <img
                 src={shoe.imageUrl}
-                alt=""
-                className="w-20 h-20 rounded object-cover border border-zinc-800 hover:border-zinc-600 transition-colors"
+                alt={shoe.label ?? ""}
+                className="w-24 h-24 rounded object-cover border border-zinc-800 hover:border-zinc-600 transition-colors"
               />
+              {shoe.label && (
+                <p className="text-[10px] text-zinc-500 mt-1 line-clamp-2 leading-tight">
+                  {shoe.label}
+                </p>
+              )}
             </button>
           ))}
         </div>

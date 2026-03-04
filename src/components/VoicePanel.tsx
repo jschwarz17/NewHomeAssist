@@ -68,7 +68,7 @@ export function VoicePanel() {
         )}
       </div>
 
-      {error && !wakeWordUnavailable && (
+      {error && (
         <p className="text-red-400 text-sm">{error}</p>
       )}
     </div>

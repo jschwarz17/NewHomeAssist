@@ -26,10 +26,11 @@ export async function GET() {
     );
     if (!res.ok) return json({ shoes: [] });
     const data = await res.json();
-    const results = (data.results ?? []).slice(0, 6).map((p: { urls?: { regular: string }; links?: { html: string }; user?: { name: string } }) => ({
+    const results = (data.results ?? []).slice(0, 6).map((p: { urls?: { regular: string }; links?: { html: string }; user?: { name: string }; alt_description?: string; description?: string }) => ({
       imageUrl: p.urls?.regular ?? "",
       link: p.links?.html ?? "https://unsplash.com/s/photos/elegant-women-shoes",
       credit: p.user?.name ?? "Unsplash",
+      label: p.alt_description ?? p.description ?? "",
     }));
     return json({ shoes: results.filter((s: { imageUrl: string }) => s.imageUrl) });
   } catch {

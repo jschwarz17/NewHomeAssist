@@ -106,9 +106,8 @@ export function VoiceProvider({
               PORCUPINE_MODEL,
               { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
             );
-          } catch (e) {
+          } catch {
             setWakeWordUnavailable(true);
-            setError(e instanceof Error ? e.message : "Failed to load wake word");
             return;
           }
         }
@@ -123,11 +122,8 @@ export function VoiceProvider({
       if (!eagleResult.started && eagleResult.error && process.env.NODE_ENV === "development") {
         console.log("[VoiceProvider] Eagle not started (enroll jesse/vanessa on Android):", eagleResult.error);
       }
-    } catch (e) {
+    } catch {
       setWakeWordUnavailable(true);
-      const msg = e instanceof Error ? e.message : "Failed to start wake word";
-      setError(msg);
-      console.error("[VoiceProvider] startListening", e);
     }
   }, [picovoiceAccessKey]);
 
