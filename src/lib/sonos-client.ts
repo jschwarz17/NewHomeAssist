@@ -268,7 +268,45 @@ export async function diagnoseSpeaker(ip: string): Promise<string[]> {
   const info = await getSpotifyServiceInfo(ip);
   lines.push(`using: sid=${info.sid} sn=${info.sn} token=${info.accountToken}`);
 
-  // Get current/last media to see native URI format
+  // Get current track info (not queue URI but actual track)
+  try {
+    const posXml = await soapRequest(
+      ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetPositionInfo",
+      "<InstanceID>0</InstanceID>"
+    );
+    const decoded = posXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const trackUri = decoded.match(/<TrackURI>([^<]*)<\/TrackURI>/);
+    if (trackUri) lines.push(`trackURI: ${trackUri[1]}`);
+    const descMatch = decoded.match(/<desc[^>]*>([^<]*)<\/desc>/i);
+    if (descMatch) lines.push(`trackToken: ${descMatch[1]}`);
+    const metaMatch = decoded.match(/<TrackMetaData>([^<]{0,600})/);
+    if (metaMatch?.[1]) lines.push(`trackMeta: ${metaMatch[1].slice(0, 250)}`);
+  } catch (e) {
+    lines.push(`PosInfo err: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Browse queue to find format of queued items
+  try {
+    const qXml = await soapRequest(
+      ip,
+      "/MediaServer/ContentDirectory/Control",
+      "urn:schemas-upnp-org:service:ContentDirectory:1",
+      "Browse",
+      `<ObjectID>Q:0</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>0</StartingIndex><RequestedCount>1</RequestedCount><SortCriteria></SortCriteria>`
+    );
+    const decoded = qXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const resUri = decoded.match(/<res[^>]*>([^<]*)<\/res>/);
+    if (resUri) lines.push(`queueItemURI: ${resUri[1]}`);
+    const descMatch = decoded.match(/<desc[^>]*>([^<]*)<\/desc>/i);
+    if (descMatch) lines.push(`queueItemToken: ${descMatch[1]}`);
+    const totalMatch = decoded.match(/<TotalMatches>(\d+)<\/TotalMatches>/);
+    if (totalMatch) lines.push(`queueSize: ${totalMatch[1]}`);
+    if (!resUri && !totalMatch) lines.push(`queueRaw: ${decoded.slice(0, 200)}`);
+  } catch (e) {
+    lines.push(`Queue err: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Get media info for queue URI
   try {
     const mediaXml = await soapRequest(
       ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetMediaInfo",
@@ -276,17 +314,12 @@ export async function diagnoseSpeaker(ip: string): Promise<string[]> {
     );
     const decoded = mediaXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
     const uriMatch = decoded.match(/<CurrentURI>([^<]*)<\/CurrentURI>/);
-    const metaMatch = decoded.match(/<CurrentURIMetaData>([^<]{0,500})/);
     if (uriMatch) lines.push(`curURI: ${uriMatch[1]}`);
-    if (metaMatch && metaMatch[1]) lines.push(`curMeta: ${metaMatch[1].slice(0, 200)}`);
-    // Also look for desc/account token in metadata
-    const descMatch = decoded.match(/<desc[^>]*>([^<]*)<\/desc>/i);
-    if (descMatch) lines.push(`curToken: ${descMatch[1]}`);
   } catch (e) {
     lines.push(`MediaInfo err: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Also extract Spotify Type from ListAvailableServices for correct token
+  // Spotify service attributes
   try {
     const svcXml = await soapRequest(
       ip,
@@ -296,10 +329,9 @@ export async function diagnoseSpeaker(ip: string): Promise<string[]> {
       ""
     );
     const decoded = svcXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
-    // Find Spotify service element and extract all attributes
     const spotifyMatch = decoded.match(/<Service[^>]*Name="Spotify"[^>]*>/i)
       ?? decoded.match(/<Service[^>]*Spotify[^>]*>/i);
-    if (spotifyMatch) lines.push(`spotifySvc: ${spotifyMatch[0].slice(0, 200)}`);
+    if (spotifyMatch) lines.push(`spotifySvc: ${spotifyMatch[0].slice(0, 250)}`);
   } catch { /* already shown above */ }
 
   return lines;
