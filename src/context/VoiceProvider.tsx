@@ -133,13 +133,14 @@ export function VoiceProvider({
     setError(null);
     setVoiceSessionActive(true);
     setLastResponse(null);
-    const token = await getRealtimeToken();
-    if (!token) {
-      setError("Could not get voice token. Check XAI_API_KEY on the server.");
+    const tokenResult = await getRealtimeToken();
+    if (!tokenResult.token) {
+      setError(tokenResult.error || "Could not get voice token.");
       setVoiceSessionActive(false);
       voiceSessionGuardRef.current = false;
       return;
     }
+    const token = tokenResult.token;
     const instructions = buildVoiceInstructions(speakerId);
     const stop = await import("@/lib/grok-realtime-voice").then((m) =>
       m.startGrokRealtimeVoice({
@@ -202,7 +203,7 @@ export function VoiceProvider({
       if (!text.trim()) return;
       setError(null);
       try {
-        const url = `${apiBaseUrl}/process-request`;
+        const url = `${apiBaseUrl}/process-request/`;
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -235,14 +236,20 @@ export function VoiceProvider({
     [apiBaseUrl, speakerId]
   );
 
-  const getRealtimeToken = useCallback(async () => {
+  const getRealtimeToken = useCallback(async (): Promise<{ token: string | null; error?: string }> => {
     try {
-      const res = await fetch(`${apiBaseUrl}/realtime-token`, { method: "POST" });
-      if (!res.ok) return null;
+      const url = `${apiBaseUrl}/realtime-token/`;
+      const res = await fetch(url, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        return { token: null, error: `Token fetch failed (${res.status}): ${body || res.statusText}` };
+      }
       const data = await res.json();
-      return data?.client_secret?.value ?? data?.value ?? null;
-    } catch {
-      return null;
+      const token = data?.client_secret?.value ?? data?.value ?? null;
+      if (!token) return { token: null, error: "Token response missing client_secret" };
+      return { token };
+    } catch (e) {
+      return { token: null, error: `Token fetch error: ${e instanceof Error ? e.message : String(e)}` };
     }
   }, [apiBaseUrl]);
 
