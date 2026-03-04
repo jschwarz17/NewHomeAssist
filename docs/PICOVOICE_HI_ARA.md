@@ -26,3 +26,7 @@ After that, the app will use "Hi Ara" (or "Hey Ara", depending on what you train
 2. Porcupine listens for the wake word ("Hi Ara" or "Porcupine").
 3. When the wake word is detected, the app shows "Wake word detected" and starts **browser Speech Recognition** to capture the next thing you say.
 4. The transcript appears; user can tap **Send to assistant** to send it to Grok, or you can extend the UI to send automatically.
+
+## Eagle speaker recognition (Android)
+
+On Android, the app can identify who is speaking (Jesse or Vanessa) using **Picovoice Eagle**. See [Eagle Speaker Setup](EAGLE_SPEAKER_SETUP.md) for enrollment and usage.

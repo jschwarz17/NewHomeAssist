@@ -86,6 +86,12 @@ export function VoiceProvider({
       porcupineRef.current = porcupine;
       await WebVoiceProcessor.subscribe(porcupine);
       setIsListening(true);
+
+      const { startEagleRecognition } = await import("@/lib/eagle");
+      const eagleResult = await startEagleRecognition(picovoiceAccessKey, (id) => setSpeakerId(id));
+      if (!eagleResult.started && eagleResult.error && process.env.NODE_ENV === "development") {
+        console.log("[VoiceProvider] Eagle not started (enroll jesse/vanessa on Android):", eagleResult.error);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to start wake word";
       setError(msg);
@@ -154,6 +160,8 @@ export function VoiceProvider({
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
+    const { stopEagleRecognition } = await import("@/lib/eagle");
+    await stopEagleRecognition();
     setWakeWordDetected(false);
     setSpeakerId(null);
     setIsListening(false);

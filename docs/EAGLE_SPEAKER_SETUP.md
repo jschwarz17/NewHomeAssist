@@ -1,0 +1,68 @@
+# Eagle Speaker Recognition (Android)
+
+Ara uses **Picovoice Eagle** on Android to recognize who is speaking (Jesse or Vanessa) so responses can be personalized. This follows the [Eagle Android Quick Start](https://picovoice.ai/docs/quick-start/eagle-android/).
+
+## Requirements
+
+- **Android device** (Eagle runs in the native app, not in the browser).
+- **Picovoice Access Key** – same key as for Porcupine (wake word). Get it from [Picovoice Console](https://console.picovoice.ai/).
+- **RECORD_AUDIO** permission – the app requests this when you enroll or start recognition.
+
+## How it works
+
+1. **Enrollment** – Each speaker (Jesse, Vanessa) enrolls once by speaking for a few seconds in a quiet environment. The app records audio and builds a voice profile, stored on the device.
+2. **Recognition** – When you tap **Start listening**, the app starts Eagle recognition. As you speak, Eagle matches the voice to the enrolled profiles and sets **speakerId** (jesse/vanessa). The assistant (Grok/Claude) uses this for personalization.
+
+## Setup
+
+### 1. Build and run the Android app
+
+```bash
+npm run build:cap
+npx cap sync android
+npx cap open android
+```
+
+Run the app on a device or emulator (microphone required).
+
+### 2. Set your Picovoice key
+
+Use the same key as for Porcupine:
+
+- **Vercel / server:** `PICOVOICE_API_KEY`
+- **Client (browser):** `NEXT_PUBLIC_PICOVOICE_API_KEY`
+
+The Android app receives the key from the WebView when you start listening (passed from the voice UI).
+
+### 3. Enroll each speaker (one-time)
+
+Eagle needs a voice profile per user. The app exposes the Eagle plugin to the web layer; you can add a **Settings → Voice → Enroll speakers** flow that calls:
+
+- `Eagle.enrollSpeaker({ speakerId: 'jesse', accessKey: '<your-key>' })`  
+- Then have Jesse speak for ~5 seconds in a quiet room.  
+- Repeat with `speakerId: 'vanessa'` for Vanessa.
+
+Until enrollment is implemented in the UI, you can trigger it from the browser console when running on Android (replace with your key):
+
+```javascript
+const { Capacitor } = await import('@capacitor/core');
+await Capacitor.Plugins.Eagle.enrollSpeaker({ speakerId: 'jesse', accessKey: 'YOUR_PICOVOICE_ACCESS_KEY' });
+// Speak for a few seconds, then:
+await Capacitor.Plugins.Eagle.enrollSpeaker({ speakerId: 'vanessa', accessKey: 'YOUR_PICOVOICE_ACCESS_KEY' });
+```
+
+### 4. Use voice as usual
+
+After at least one enrollment (or both jesse and vanessa), tap **Start listening**. When Eagle recognizes the speaker, the UI shows the name and the assistant uses it for personalized replies.
+
+## Technical details
+
+- **Dependency:** `ai.picovoice:eagle-android:1.0.1` (see `android/app/build.gradle`).
+- **Plugin:** `EaglePlugin.java` – enrollment (records and enrolls until 100%), recognition (runs in a background thread and emits `speaker` events), profile storage in `SharedPreferences`.
+- **Web:** `src/lib/eagle.ts` – checks for Android, calls the plugin, and subscribes to speaker events. `VoiceProvider` starts/stops Eagle when you start/stop listening and updates `speakerId` from events.
+
+## Troubleshooting
+
+- **"Enroll both jesse and vanessa first"** – Run enrollment for each speaker at least once.
+- **"RECORD_AUDIO permission required"** – Grant microphone permission when the app asks.
+- **Speaker not updating** – Ensure a quiet environment and that the enrolled speaker is the one talking. Re-enroll if you changed microphone or environment.
