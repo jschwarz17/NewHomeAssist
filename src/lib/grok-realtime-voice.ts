@@ -59,7 +59,7 @@ export async function startGrokRealtimeVoice(
     return () => {};
   }
 
-  const MIC_DELAY_MS = 600;
+  const MIC_DELAY_MS = 250;
 
   const protocol = `xai-client-secret.${token}`;
   const ws = new WebSocket(WS_URL, [protocol]);
