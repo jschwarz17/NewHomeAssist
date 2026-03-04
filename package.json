@@ -19,6 +19,7 @@
     "@capacitor/core": "^8.1.0",
     "@picovoice/porcupine-web": "^4.0.0",
     "@picovoice/web-voice-processor": "^4.0.9",
+    "@svrooij/sonos": "^2.5.0",
     "better-sqlite3": "^12.6.2",
     "next": "16.1.6",
     "react": "19.2.3",

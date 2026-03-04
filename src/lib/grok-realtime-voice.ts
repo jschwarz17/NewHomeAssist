@@ -87,6 +87,46 @@ const PLAY_YOUTUBE_TOOL = {
   },
 };
 
+const PAUSE_MUSIC_TOOL = {
+  type: "function",
+  name: "pause_music",
+  description:
+    "Pause or stop the music currently playing on Sonos speakers. " +
+    "Call this when the user says 'pause', 'stop the music', 'turn off the music', 'silence', etc.",
+  parameters: {
+    type: "object",
+    properties: {
+      device: {
+        type: "string",
+        description: "Which room/speaker to pause. Default: 'living room'.",
+      },
+    },
+  },
+};
+
+const SET_VOLUME_TOOL = {
+  type: "function",
+  name: "set_volume",
+  description:
+    "Set the volume on Sonos speakers. Call this when the user says " +
+    "'turn it up', 'turn it down', 'set volume to...', 'louder', 'quieter', etc. " +
+    "Volume range is 0-100.",
+  parameters: {
+    type: "object",
+    properties: {
+      volume: {
+        type: "number",
+        description: "Volume level 0-100. For 'turn it up'/'louder' use 60-70, for 'turn it down'/'quieter' use 20-30.",
+      },
+      device: {
+        type: "string",
+        description: "Which room/speaker. Default: 'living room'.",
+      },
+    },
+    required: ["volume"],
+  },
+};
+
 const STORE_MEMORY_TOOL = {
   type: "function",
   name: "store_memory",
@@ -122,13 +162,15 @@ export interface GrokRealtimeOptions {
   onError?: (err: string) => void;
   onMemoryStored?: (text: string) => void;
   onPlayMusic?: (query: string, device: string) => Promise<string>;
+  onPauseMusic?: (device: string) => Promise<string>;
+  onSetVolume?: (volume: number, device: string) => Promise<string>;
   onPlayYouTube?: (query: string) => Promise<string>;
 }
 
 export async function startGrokRealtimeVoice(
   options: GrokRealtimeOptions
 ): Promise<() => void> {
-  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored, onPlayMusic, onPlayYouTube } = options;
+  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored, onPlayMusic, onPauseMusic, onSetVolume, onPlayYouTube } = options;
   if (!token) {
     onError?.("No realtime token");
     return () => {};
@@ -194,6 +236,29 @@ export async function startGrokRealtimeVoice(
         return;
       }
 
+      if (name === "pause_music") {
+        const device = parsed.device || "living room";
+        if (onPauseMusic) {
+          const result = await onPauseMusic(device);
+          respondToFunctionCall(callId, { success: true, message: result });
+        } else {
+          respondToFunctionCall(callId, { success: false, message: "Music control not available" });
+        }
+        return;
+      }
+
+      if (name === "set_volume") {
+        const volume = parsed.volume ?? 30;
+        const device = parsed.device || "living room";
+        if (onSetVolume) {
+          const result = await onSetVolume(volume, device);
+          respondToFunctionCall(callId, { success: true, message: result });
+        } else {
+          respondToFunctionCall(callId, { success: false, message: "Volume control not available" });
+        }
+        return;
+      }
+
       if (name === "play_youtube") {
         const query = parsed.query ?? "";
         if (query && onPlayYouTube) {
@@ -226,7 +291,7 @@ export async function startGrokRealtimeVoice(
           voice: "Ara",
           instructions,
           turn_detection: { type: "server_vad" },
-          tools: [STORE_MEMORY_TOOL, PLAY_MUSIC_TOOL, PLAY_YOUTUBE_TOOL],
+          tools: [STORE_MEMORY_TOOL, PLAY_MUSIC_TOOL, PAUSE_MUSIC_TOOL, SET_VOLUME_TOOL, PLAY_YOUTUBE_TOOL],
           audio: {
             input: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },
             output: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },
