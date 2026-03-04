@@ -44,6 +44,49 @@ function base64PCM16ToFloat32(base64: string): Float32Array {
   return float32;
 }
 
+const PLAY_MUSIC_TOOL = {
+  type: "function",
+  name: "play_music",
+  description:
+    "Play music on the household Sonos speakers. Call this when the user says anything like " +
+    "'play some music', 'put on music', 'play a song', 'I want to listen to...', or names a genre/artist/playlist.\n\n" +
+    "Defaults: if no music is specified, play the 'Latin indie' playlist on Spotify. " +
+    "If no device/room is specified, default to 'living room'.\n" +
+    "Available speakers: living room, guest bathroom, bedroom, kitchen, office.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "What music to play — artist, song, genre, playlist name, or mood. Default: 'Latin indie'",
+      },
+      device: {
+        type: "string",
+        description: "Which room/speaker to play on. Default: 'living room'. Options: living room, guest bathroom, bedroom, kitchen, office.",
+      },
+    },
+  },
+};
+
+const PLAY_YOUTUBE_TOOL = {
+  type: "function",
+  name: "play_youtube",
+  description:
+    "Open YouTube and play a video. Call this when the user says anything like " +
+    "'let's watch a video', 'open YouTube', 'play a video of...', 'I want to see...', " +
+    "'show me a video about...', or describes any video content they want to watch.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "What to search for on YouTube — topic, title, creator, or description of the video.",
+      },
+    },
+    required: ["query"],
+  },
+};
+
 const STORE_MEMORY_TOOL = {
   type: "function",
   name: "store_memory",
@@ -78,12 +121,14 @@ export interface GrokRealtimeOptions {
   onTranscript?: (text: string) => void;
   onError?: (err: string) => void;
   onMemoryStored?: (text: string) => void;
+  onPlayMusic?: (query: string, device: string) => Promise<string>;
+  onPlayYouTube?: (query: string) => Promise<string>;
 }
 
 export async function startGrokRealtimeVoice(
   options: GrokRealtimeOptions
 ): Promise<() => void> {
-  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored } = options;
+  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored, onPlayMusic, onPlayYouTube } = options;
   if (!token) {
     onError?.("No realtime token");
     return () => {};
@@ -116,35 +161,52 @@ export async function startGrokRealtimeVoice(
     } catch {}
   };
 
-  function handleFunctionCall(name: string, callId: string, args: string) {
-    if (name === "store_memory") {
-      try {
-        const parsed = JSON.parse(args);
+  function respondToFunctionCall(callId: string, output: object) {
+    ws.send(JSON.stringify({
+      type: "conversation.item.create",
+      item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) },
+    }));
+    ws.send(JSON.stringify({ type: "response.create" }));
+  }
+
+  async function handleFunctionCall(name: string, callId: string, args: string) {
+    try {
+      const parsed = JSON.parse(args);
+
+      if (name === "store_memory") {
         const text = parsed.text ?? "";
         if (text) {
           onMemoryStored?.(text);
-          ws.send(JSON.stringify({
-            type: "conversation.item.create",
-            item: {
-              type: "function_call_output",
-              call_id: callId,
-              output: JSON.stringify({ success: true, stored: text }),
-            },
-          }));
-          ws.send(JSON.stringify({ type: "response.create" }));
+          respondToFunctionCall(callId, { success: true, stored: text });
           return;
         }
-      } catch {}
-    }
-    ws.send(JSON.stringify({
-      type: "conversation.item.create",
-      item: {
-        type: "function_call_output",
-        call_id: callId,
-        output: JSON.stringify({ success: false, error: "Unknown function" }),
-      },
-    }));
-    ws.send(JSON.stringify({ type: "response.create" }));
+      }
+
+      if (name === "play_music") {
+        const query = parsed.query || "Latin indie";
+        const device = parsed.device || "living room";
+        if (onPlayMusic) {
+          const result = await onPlayMusic(query, device);
+          respondToFunctionCall(callId, { success: true, message: result });
+        } else {
+          respondToFunctionCall(callId, { success: false, message: "Music playback not available" });
+        }
+        return;
+      }
+
+      if (name === "play_youtube") {
+        const query = parsed.query ?? "";
+        if (query && onPlayYouTube) {
+          const result = await onPlayYouTube(query);
+          respondToFunctionCall(callId, { success: true, message: result });
+        } else {
+          respondToFunctionCall(callId, { success: false, message: "YouTube not available" });
+        }
+        return;
+      }
+    } catch {}
+
+    respondToFunctionCall(callId, { success: false, error: "Unknown function" });
   }
 
   ws.onerror = () => {
@@ -164,7 +226,7 @@ export async function startGrokRealtimeVoice(
           voice: "Ara",
           instructions,
           turn_detection: { type: "server_vad" },
-          tools: [STORE_MEMORY_TOOL],
+          tools: [STORE_MEMORY_TOOL, PLAY_MUSIC_TOOL, PLAY_YOUTUBE_TOOL],
           audio: {
             input: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },
             output: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },

@@ -36,6 +36,8 @@ function buildVoiceInstructions(speakerId: SpeakerId, memories: string[]): strin
   else base += " Be friendly and concise.";
 
   base += " You have a store_memory tool — use it aggressively. ANY time a user shares personal information (names, preferences, facts about their life, pet names, family details, allergies, routines, languages, important dates) or says anything like 'remember', 'don't forget', 'I want you to know', 'I want to teach you', 'learn this', or corrects you about a fact — call store_memory immediately. When in doubt, store it. After storing, briefly confirm what you remembered.";
+  base += " You have a play_music tool to play music on Sonos speakers. Default: 'Latin indie' playlist on the living room speakers. The user can request any music and any room (living room, guest bathroom, bedroom, kitchen, office).";
+  base += " You have a play_youtube tool to open YouTube videos. When the user wants to watch something, search YouTube and open it for them.";
 
   if (memories.length > 0) {
     base += "\n\nThings you remember from past conversations:\n" + memories.map((m) => `- ${m}`).join("\n");
@@ -184,6 +186,37 @@ export function VoiceProvider({
               localStorage.setItem("ara_memories", JSON.stringify(memories));
             }
           } catch {}
+        },
+        onPlayMusic: async (query, device) => {
+          try {
+            const res = await fetch(`${apiBaseUrl}/sonos/play/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query, device }),
+            });
+            const data = await res.json();
+            return data.message ?? "Music request sent";
+          } catch {
+            return "Could not reach Sonos. Sonos API may not be configured yet.";
+          }
+        },
+        onPlayYouTube: async (query) => {
+          try {
+            const res = await fetch(`${apiBaseUrl}/youtube/search/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query }),
+            });
+            const data = await res.json();
+            if (data.videoUrl) {
+              const { openLink } = await import("@/lib/open-link");
+              await openLink(data.videoUrl);
+              return `Opening YouTube: ${data.title ?? query}`;
+            }
+            return "Could not find a video";
+          } catch {
+            return "Could not reach YouTube";
+          }
         },
       })
     );
