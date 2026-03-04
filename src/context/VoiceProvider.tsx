@@ -40,7 +40,7 @@ function buildVoiceInstructions(speakerId: SpeakerId, memories: string[]): strin
   else base += " Be friendly and concise.";
 
   base += " You have a store_memory tool — use it aggressively. ANY time a user shares personal information (names, preferences, facts about their life, pet names, family details, allergies, routines, languages, important dates) or says anything like 'remember', 'don't forget', 'I want you to know', 'I want to teach you', 'learn this', or corrects you about a fact — call store_memory immediately. When in doubt, store it. After storing, briefly confirm what you remembered.";
-  base += " You have play_music, pause_music, and set_volume tools for Sonos speakers. Default music: 'Latin indie' playlist on living room speakers. The user can request any music and any room (living room, guest bathroom, bedroom, kitchen, office). Use pause_music to stop, set_volume to adjust loudness.";
+  base += " You have play_music, pause_music, and set_volume tools for Sonos speakers. Default music: 'Latin indie' playlist on Living Room speakers. Available rooms: Living Room, Downstairs, Guest Bathroom, Master Bathroom. Use pause_music to stop, set_volume to adjust loudness.";
   base += " You have a play_youtube tool to show YouTube videos on screen. When the user wants to watch something, search YouTube and embed it for them. You also have a close_video tool — when the user says 'go back', 'dashboard', 'done', 'done watching', 'close', 'exit', 'that's enough', or anything indicating they're finished watching, call close_video to return them to the dashboard.";
 
   if (memories.length > 0) {

@@ -51,8 +51,8 @@ const PLAY_MUSIC_TOOL = {
     "Play music on the household Sonos speakers. Call this when the user says anything like " +
     "'play some music', 'put on music', 'play a song', 'I want to listen to...', or names a genre/artist/playlist.\n\n" +
     "Defaults: if no music is specified, play the 'Latin indie' playlist on Spotify. " +
-    "If no device/room is specified, default to 'living room'.\n" +
-    "Available speakers: living room, guest bathroom, bedroom, kitchen, office.",
+    "If no device/room is specified, default to 'Living Room'.\n" +
+    "Available speakers: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
   parameters: {
     type: "object",
     properties: {
@@ -62,7 +62,7 @@ const PLAY_MUSIC_TOOL = {
       },
       device: {
         type: "string",
-        description: "Which room/speaker to play on. Default: 'living room'. Options: living room, guest bathroom, bedroom, kitchen, office.",
+        description: "Which room/speaker to play on. Default: 'Living Room'. Options: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
       },
     },
   },
@@ -98,7 +98,7 @@ const PAUSE_MUSIC_TOOL = {
     properties: {
       device: {
         type: "string",
-        description: "Which room/speaker to pause. Default: 'living room'.",
+        description: "Which room/speaker to pause. Default: 'Living Room'. Options: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
       },
     },
   },
@@ -120,7 +120,7 @@ const SET_VOLUME_TOOL = {
       },
       device: {
         type: "string",
-        description: "Which room/speaker. Default: 'living room'.",
+        description: "Which room/speaker. Default: 'Living Room'. Options: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
       },
     },
     required: ["volume"],
