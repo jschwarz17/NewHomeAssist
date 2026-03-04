@@ -195,11 +195,16 @@ export function VoiceProvider({
         onPlayMusic: async (query, device) => {
           try {
             const spotify = await import("@/lib/spotify-client");
+            const sonos = await import("@/lib/sonos-client");
             if (spotify.isLoggedIn()) {
               const result = await spotify.search(query, apiBaseUrl);
-              return await spotify.playOnDevice(result, device, apiBaseUrl);
+              // Try Spotify Connect first, fall back to Sonos UPnP
+              try {
+                return await spotify.playOnDevice(result, device, apiBaseUrl);
+              } catch {
+                return await sonos.playSpotify(result.uri, result.name, device);
+              }
             }
-            const sonos = await import("@/lib/sonos-client");
             const sonosResult = await sonos.play(device);
             return `${sonosResult} — "${query}" (connect Spotify for full control)`;
           } catch (e) {

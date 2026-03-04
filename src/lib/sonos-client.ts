@@ -202,17 +202,70 @@ export async function testConnection(ip: string): Promise<boolean> {
   }
 }
 
+interface SpotifyServiceInfo {
+  sid: string;
+  sn: string;
+  accountToken: string;
+}
+
+const SPOTIFY_SVC_CACHE_KEY = "sonos_spotify_svc";
+
+async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
+  try {
+    const cached = localStorage.getItem(SPOTIFY_SVC_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch { /* ignore */ }
+
+  const svcXml = await soapRequest(
+    ip,
+    "/MusicServices/Control",
+    "urn:schemas-upnp-org:service:MusicServices:1",
+    "ListAvailableServices",
+    ""
+  );
+
+  let sid = "9";
+  const sidMatch = svcXml.match(/Id&gt;(\d+)&lt;.*?Name&gt;Spotify/i)
+    ?? svcXml.match(/Id>(\d+)<.*?Name>Spotify/i)
+    ?? svcXml.match(/"(\d+)"[^>]*Spotify/i);
+  if (sidMatch) sid = sidMatch[1];
+
+  let sn = "1";
+  try {
+    const acctXml = await soapRequest(
+      ip,
+      "/SystemProperties/Control",
+      "urn:schemas-upnp-org:service:SystemProperties:1",
+      "GetString",
+      "<VariableName>R_AvailableServiceList</VariableName>"
+    );
+    const snMatch = acctXml.match(new RegExp(`ServiceId="${sid}"[^>]*SerialNum="(\\d+)"`, "i"))
+      ?? acctXml.match(new RegExp(`SerialNum="(\\d+)"[^>]*ServiceId="${sid}"`, "i"));
+    if (snMatch) sn = snMatch[1];
+  } catch { /* use default */ }
+
+  const typeId = "2311";
+  const info: SpotifyServiceInfo = {
+    sid,
+    sn,
+    accountToken: `SA_RINCON${typeId}_X_#Svc${typeId}-0-Token`,
+  };
+
+  try { localStorage.setItem(SPOTIFY_SVC_CACHE_KEY, JSON.stringify(info)); } catch { /* ignore */ }
+  return info;
+}
+
 /**
  * Play a Spotify URI on a Sonos speaker.
- * Converts spotify:track:xxx / spotify:playlist:xxx / spotify:album:xxx
- * into Sonos-compatible AVTransport URIs.
+ * Queries the speaker for its Spotify service config to build correct URIs.
  */
 export async function playSpotify(spotifyUri: string, title: string, roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
 
-  const sonosUri = spotifyUriToSonos(spotifyUri);
-  const metadata = buildSpotifyMetadata(spotifyUri, title);
+  const svc = await getSpotifyServiceInfo(speaker.ip);
+  const sonosUri = spotifyUriToSonos(spotifyUri, svc);
+  const metadata = buildSpotifyMetadata(spotifyUri, title, svc);
 
   await soapRequest(
     speaker.ip,
@@ -225,52 +278,49 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
   return `Playing "${title}" on ${speaker.name}`;
 }
 
-function spotifyUriToSonos(uri: string): string {
-  // spotify:track:6rqhFgbbKwnb9MLmUQDhG6 → x-sonos-spotify:spotify:track:6rqhFgbbKwnb9MLmUQDhG6
-  // spotify:playlist:37i9dQZF1DX5IDTimEWoTd → x-rincon-cpcontainer:1006206cspotify:playlist:37i9dQZF1DX5IDTimEWoTd
-  // spotify:album:xxx → x-rincon-cpcontainer:1004206cspotify:album:xxx
+function spotifyUriToSonos(uri: string, svc: SpotifyServiceInfo): string {
   const parts = uri.split(":");
   const type = parts[1];
 
   if (type === "track") {
-    return `x-sonos-spotify:${uri}?sid=12&flags=8224&sn=5`;
+    return `x-sonos-spotify:${uri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
   }
   if (type === "playlist") {
-    return `x-rincon-cpcontainer:1006206c${uri}`;
+    return `x-rincon-cpcontainer:1006206c${uri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
   }
   if (type === "album") {
-    return `x-rincon-cpcontainer:1004206c${uri}`;
+    return `x-rincon-cpcontainer:1004206c${uri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
   }
-  return `x-sonos-spotify:${uri}?sid=12&flags=8224&sn=5`;
+  if (type === "artist") {
+    return `x-rincon-cpcontainer:10052064${uri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
+  }
+  return `x-sonos-spotify:${uri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
 }
 
-function buildSpotifyMetadata(uri: string, title: string): string {
+function buildSpotifyMetadata(uri: string, title: string, svc: SpotifyServiceInfo): string {
   const parts = uri.split(":");
   const type = parts[1];
-  const id = parts[2];
 
   let itemClass = "object.item.audioItem.musicTrack";
-  let parentId = "";
 
   if (type === "track") {
     itemClass = "object.item.audioItem.musicTrack";
-    parentId = `1004206c${uri}`;
   } else if (type === "playlist") {
     itemClass = "object.container.playlistContainer";
-    parentId = `10062a6c${uri}`;
   } else if (type === "album") {
     itemClass = "object.container.album.musicAlbum";
-    parentId = `1004206c${uri}`;
+  } else if (type === "artist") {
+    itemClass = "object.container.person.musicArtist";
   }
 
   const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   return (
     `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
-    `<item id="00032020${uri}" parentID="${parentId}" restricted="true">` +
+    `<item id="00032020${uri}" parentID="0" restricted="true">` +
     `<dc:title>${safeTitle}</dc:title>` +
     `<upnp:class>${itemClass}</upnp:class>` +
-    `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON2311_X_#Svc2311-0-Token</desc>` +
+    `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">${svc.accountToken}</desc>` +
     `</item></DIDL-Lite>`
   );
 }
