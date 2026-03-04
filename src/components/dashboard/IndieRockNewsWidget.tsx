@@ -33,7 +33,9 @@ export function IndieRockNewsWidget() {
       {loading ? (
         <p className="p-4 text-sm text-zinc-500">Loading…</p>
       ) : !story ? (
-        <p className="p-4 text-sm text-zinc-500">Add NEWS_API_KEY on the server for live stories.</p>
+        <p className="p-4 text-sm text-zinc-500">
+          In .env.local set NEXT_PUBLIC_ASSISTANT_API_URL to your Vercel URL, then rebuild. On Vercel, set NEWS_API_KEY.
+        </p>
       ) : (
         <a href={story.url} target="_blank" rel="noopener noreferrer" className="block">
           {story.image && (

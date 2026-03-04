@@ -23,13 +23,28 @@ Open http://localhost:3000. Set `NEXT_PUBLIC_ASSISTANT_API_URL=http://localhost:
 3. On the tablet, open the Capacitor app and point the app’s “dev server URL” to `http://<laptop-IP>:3000` (or configure this in the native project / Capacitor config if you use a custom dev URL).
 4. The tablet will load the Next.js app from your laptop and you get live reload.
 
-### Env vars
+### Env vars (two places — neither is in git)
 
-Copy `.env.example` to `.env.local` and fill:
+**Environment variables are never pushed to git.** You configure them in two places:
 
-- `NEXT_PUBLIC_PICOVOICE_ACCESS_KEY` – for Porcupine + Eagle.
-- `XAI_API_KEY` – for Grok chat and Grok Voice Agent (used only on Vercel or when running `next dev` with API).
-- `NEXT_PUBLIC_ASSISTANT_API_URL` – **on the tablet build**, set this to your Vercel URL (e.g. `https://jesse-home-assistant.vercel.app`) so the app calls the deployed API.
+1. **In this repo (`.env.local`)** — used when you run `npm run build:cap`. These values get baked into the Android app. **Use one variable per line** (no commas, no multiple vars on one line):
+   - `NEXT_PUBLIC_PICOVOICE_API_KEY` – for wake word (Porcupine) + Eagle. Get from [Picovoice Console](https://console.picovoice.ai/).
+   - `NEXT_PUBLIC_ASSISTANT_API_URL` – **required for the tablet.** Set to your Vercel URL (e.g. `https://your-app.vercel.app`). No trailing slash. Without this, the app has no server to call, so widgets show “set NEXT_PUBLIC_ASSISTANT_API_URL” and the assistant won’t work.
+
+   Example `.env.local`:
+   ```
+   NEXT_PUBLIC_PICOVOICE_API_KEY=your-picovoice-key-here
+   NEXT_PUBLIC_ASSISTANT_API_URL=https://your-app.vercel.app
+   ```
+
+2. **On Vercel (Dashboard → Project → Settings → Environment Variables)** — used when API routes run on Vercel:
+   - `NEWS_API_KEY` – for fintech and indie rock news widgets. Get from [NewsAPI](https://newsapi.org/register).
+   - `ALPHA_VANTAGE_KEY` – for stock prices widget. Get from [Alpha Vantage](https://www.alphavantage.co/support/#api-key).
+   - `XAI_API_KEY`, `CLAUDE_API_KEY`, `PICOVOICE_API_KEY`, etc. as in `.env.example`.
+
+If widgets say “Add NEWS_API_KEY” or “set NEXT_PUBLIC_ASSISTANT_API_URL”, the app either isn’t calling Vercel (missing `NEXT_PUBLIC_ASSISTANT_API_URL` in `.env.local` when you built) or the key isn’t set on Vercel. Fix both, then rebuild the app and redeploy.
+
+**Wake word not working on the tablet:** (1) Add `NEXT_PUBLIC_PICOVOICE_API_KEY` to `.env.local`, run `npm run build:cap` and `npx cap sync android`, then reinstall the app — the key is baked in at build time and is not in git. (2) Grant the app microphone permission. (3) Without custom “Hey Ara” files, say **“Porcupine”** to test. See [docs/PICOVOICE_HI_ARA.md](PICOVOICE_HI_ARA.md).
 
 ## Production
 

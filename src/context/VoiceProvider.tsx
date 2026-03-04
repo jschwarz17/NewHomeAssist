@@ -29,6 +29,13 @@ interface VoiceProviderProps {
 const PORCUPINE_MODEL = { publicPath: "/porcupine_params.pv" };
 const WAKE_WORD_LABEL = "hey_ara";
 
+function buildVoiceInstructions(speakerId: SpeakerId): string {
+  const base = "You are Ara, a warm and friendly home assistant. Use Park Slope, Brooklyn for weather and location. Keep responses brief and voice-friendly (1-3 sentences).";
+  if (speakerId === "jesse") return base + " User is Jesse (fintech, dev workflow; no dairy). Always start your reply with 'Hey Jesse'.";
+  if (speakerId === "vanessa") return base + " User is Vanessa (calendar, music, lifestyle). Always start your reply with 'Hey Vanessa'.";
+  return base + " Be friendly and concise.";
+}
+
 export function VoiceProvider({
   children,
   picovoiceAccessKey,
@@ -36,6 +43,7 @@ export function VoiceProvider({
 }: VoiceProviderProps) {
   const [isListening, setIsListening] = useState(false);
   const [wakeWordDetected, setWakeWordDetected] = useState(false);
+  const [voiceSessionActive, setVoiceSessionActive] = useState(false);
   const [speakerId, setSpeakerId] = useState<SpeakerId>(null);
   const [transcript, setTranscript] = useState("");
   const [lastResponse, setLastResponse] = useState<string | null>(null);
@@ -44,12 +52,14 @@ export function VoiceProvider({
   const porcupineRef = useRef<unknown>(null);
   const recognitionRef = useRef<{ abort?: () => void } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const stopVoiceSessionRef = useRef<(() => void) | null>(null);
 
   const startListening = useCallback(async () => {
     setError(null);
     setWakeWordDetected(false);
     setTranscript("");
     setLastResponse(null);
+    setVoiceSessionActive(false);
 
     try {
       if (!picovoiceAccessKey) {
@@ -58,12 +68,12 @@ export function VoiceProvider({
         return;
       }
 
-      const { Porcupine, BuiltInKeyword } = await import("@picovoice/porcupine-web");
+      const { Porcupine } = await import("@picovoice/porcupine-web");
       const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
 
-      const keywordDetectionCallback = (detection: { label: string }) => {
+      const keywordDetectionCallback = () => {
         setWakeWordDetected(true);
-        startSpeechRecognition();
+        startGrokVoiceSession();
       };
 
       let porcupine;
@@ -85,13 +95,10 @@ export function VoiceProvider({
             { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
           );
         } catch {
-          porcupine = await Porcupine.create(
-            picovoiceAccessKey,
-            [{ builtin: BuiltInKeyword.Porcupine, sensitivity: 0.5 }],
-            keywordDetectionCallback,
-            PORCUPINE_MODEL,
-            { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
+          setError(
+            "Hey Ara wake word requires a custom keyword file. Add public/hey_ara.ppn from Picovoice Console (Porcupine → create keyword 'Hey Ara' → Web WASM). See docs/PICOVOICE_HI_ARA.md."
           );
+          return;
         }
       }
 
@@ -111,44 +118,41 @@ export function VoiceProvider({
     }
   }, [picovoiceAccessKey]);
 
-  function startSpeechRecognition() {
-    if (typeof window === "undefined") return;
-    type RecognitionInstance = {
-      continuous: boolean;
-      interimResults: boolean;
-      lang: string;
-      onresult: ((e: { results: Array<{ 0?: { transcript?: string }; length: number }> }) => void) | null;
-      onerror: (() => void) | null;
-      onend: (() => void) | null;
-      start: () => void;
-      abort?: () => void;
-    };
-    const SpeechRecognitionAPI = (window as unknown as { SpeechRecognition?: new () => RecognitionInstance; webkitSpeechRecognition?: new () => RecognitionInstance }).SpeechRecognition
-      ?? (window as unknown as { webkitSpeechRecognition?: new () => RecognitionInstance }).webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      setError("Speech recognition not supported in this browser.");
+  async function startGrokVoiceSession() {
+    if (voiceSessionActive) return;
+    setError(null);
+    setVoiceSessionActive(true);
+    setLastResponse(null);
+    const token = await getRealtimeToken();
+    if (!token) {
+      setError("Could not get voice token. Check XAI_API_KEY on the server.");
+      setVoiceSessionActive(false);
       return;
     }
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
-    recognition.onresult = (event: { results: Array<{ 0?: { transcript?: string }; length: number }> }) => {
-      const result = event.results[event.results.length - 1];
-      const text = result?.[0]?.transcript?.trim();
-      if (text) {
-        setTranscript(text);
-      }
+    const instructions = buildVoiceInstructions(speakerId);
+    const stop = await import("@/lib/grok-realtime-voice").then((m) =>
+      m.startGrokRealtimeVoice({
+        token,
+        instructions,
+        onTranscript: (t) => setLastResponse((prev) => (prev ? prev + t : t)),
+        onError: (err) => {
+          setError(err);
+          setVoiceSessionActive(false);
+        },
+      })
+    );
+    stopVoiceSessionRef.current = () => {
+      stop();
+      setVoiceSessionActive(false);
+      setLastResponse(null);
     };
-    recognition.onerror = () => {};
-    recognition.onend = () => {
-      recognitionRef.current = null;
-    };
-    recognitionRef.current = recognition;
-    recognition.start();
   }
 
   const stopListening = useCallback(async () => {
+    if (stopVoiceSessionRef.current) {
+      stopVoiceSessionRef.current();
+      stopVoiceSessionRef.current = null;
+    }
     try {
       const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
       if (porcupineRef.current) {
@@ -175,6 +179,7 @@ export function VoiceProvider({
     const { stopEagleRecognition } = await import("@/lib/eagle");
     await stopEagleRecognition();
     setWakeWordDetected(false);
+    setVoiceSessionActive(false);
     setSpeakerId(null);
     setIsListening(false);
   }, []);
@@ -228,6 +233,15 @@ export function VoiceProvider({
     }
   }, [apiBaseUrl]);
 
+  const endVoiceSession = useCallback(() => {
+    if (stopVoiceSessionRef.current) {
+      stopVoiceSessionRef.current();
+      stopVoiceSessionRef.current = null;
+    }
+    setVoiceSessionActive(false);
+    setLastResponse(null);
+  }, []);
+
   // Auto-start wake word listening when the app loads (no tap required)
   useEffect(() => {
     if (picovoiceAccessKey) startListening();
@@ -242,12 +256,14 @@ export function VoiceProvider({
   const value: VoiceContextValue = {
     isListening,
     wakeWordDetected,
+    voiceSessionActive,
     speakerId,
     transcript,
     lastResponse,
     error,
     startListening,
     stopListening,
+    endVoiceSession,
     sendToAssistant,
     getRealtimeToken,
   };

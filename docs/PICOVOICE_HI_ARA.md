@@ -1,19 +1,19 @@
 # Wake word "Hey Ara" with Picovoice
 
-The app uses **Porcupine** (Picovoice) for wake word detection. The base model file **`porcupine_params.pv`** is in `public/` so the built-in wake word **"Porcupine"** works out of the box. To use **"Hey Ara"** (or "Hi Ara") instead:
+The app uses **Porcupine** (Picovoice) for wake word detection and **requires** a custom "Hey Ara" (or "Hi Ara") keyword file. There is no fallback to another wake word.
 
 ## 1. Create the custom wake word
 
 1. Sign in at [Picovoice Console](https://console.picovoice.ai/).
 2. Open **Porcupine** → create a **custom keyword**.
-3. Enter the phrase **"Hey Ara"** (or "Hi Ara" if you prefer).
+3. Enter the phrase **"Hey Ara"** (or **"Hi Ara"** if you prefer).
 4. Choose platform **Web (WASM)** and download the `.ppn` file.
 
 ## 2. Add it to the project
 
-1. For **"Hey Ara"**: rename the file to **`hey_ara.ppn`** and put it in **`public/hey_ara.ppn`**.
-2. For **"Hi Ara"**: rename to **`hi_ara.ppn`** and put it in **`public/hi_ara.ppn`**.
-3. The app tries **hey_ara.ppn** first, then **hi_ara.ppn**, then falls back to the built-in "Porcupine" wake word.
+1. For **"Hey Ara"**: rename the downloaded file to **`hey_ara.ppn`** and put it in **`public/hey_ara.ppn`**.
+2. For **"Hi Ara"** only: rename to **`hi_ara.ppn`** and put it in **`public/hi_ara.ppn`**.
+3. The app tries **hey_ara.ppn** first, then **hi_ara.ppn**. If neither exists, the Voice panel will show an error asking you to add the file.
 4. Rebuild and sync:
    - `npm run build:cap`
    - `npx cap sync android`

@@ -7,9 +7,11 @@ export type SpeakerId = "jesse" | "vanessa" | null;
 export interface VoiceState {
   isListening: boolean;
   wakeWordDetected: boolean;
+  /** True when in a live Grok Voice conversation (after wake word) */
+  voiceSessionActive: boolean;
   speakerId: SpeakerId;
   transcript: string;
-  /** Last response from Ara (so UI can show "Hey Jesse, ...") */
+  /** Last response from Ara (transcript of voice or text) */
   lastResponse: string | null;
   error: string | null;
 }
@@ -17,7 +19,8 @@ export interface VoiceState {
 export interface VoiceContextValue extends VoiceState {
   startListening: () => Promise<void>;
   stopListening: () => void;
+  /** End the current Grok Voice session and return to wake-word listening */
+  endVoiceSession: () => void;
   sendToAssistant: (text: string) => Promise<void>;
-  /** Fetch ephemeral token for Grok Voice Agent (wss://api.x.ai/v1/realtime) with voice "Ara" */
   getRealtimeToken: () => Promise<string | null>;
 }

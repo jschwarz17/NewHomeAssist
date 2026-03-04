@@ -54,7 +54,9 @@ export function StockPricesWidget() {
         ))}
       </ul>
       {!loading && quotes.every((q) => q.price === "—") && (
-        <p className="text-xs text-zinc-500 mt-2">Add ALPHA_VANTAGE_KEY on the server for live prices.</p>
+        <p className="text-xs text-zinc-500 mt-2">
+          In .env.local set NEXT_PUBLIC_ASSISTANT_API_URL to your Vercel URL, then rebuild. On Vercel, set ALPHA_VANTAGE_KEY.
+        </p>
       )}
     </div>
   );
