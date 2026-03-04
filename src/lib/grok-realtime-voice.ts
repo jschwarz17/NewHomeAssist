@@ -131,10 +131,12 @@ const CLOSE_VIDEO_TOOL = {
   type: "function",
   name: "close_video",
   description:
-    "Close the currently playing YouTube video and return to the main dashboard. " +
-    "Call this when the user says anything like 'go back', 'back to dashboard', 'close the video', " +
-    "'done', 'done watching', 'stop the video', 'exit', 'go home', 'dashboard', 'that's enough', " +
-    "'I'm done', or any phrase that indicates they want to stop watching and return to the dashboard.",
+    "IMPORTANT: Call this tool whenever the user wants to stop watching a YouTube video or return to the dashboard. " +
+    "Trigger phrases include but are not limited to: 'stop', 'stop the video', 'close', 'close it', " +
+    "'go back', 'back', 'dashboard', 'done', 'done watching', 'exit', 'go home', 'that's enough', " +
+    "'I'm done', 'enough', 'turn it off', 'shut it off', 'end the video', 'no more', 'next', " +
+    "or ANY phrase that suggests the user is finished watching or wants to leave the video screen. " +
+    "If a video was recently played and the user says 'stop' or 'done', ALWAYS use close_video (not pause_music).",
   parameters: { type: "object", properties: {} },
 };
 
