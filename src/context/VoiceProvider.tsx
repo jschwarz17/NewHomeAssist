@@ -176,7 +176,14 @@ export function VoiceProvider({
           voiceSessionGuardRef.current = false;
         },
         onMemoryStored: (text) => {
-          console.log("[Ara] Memory stored:", text);
+          try {
+            const raw = localStorage.getItem("ara_memories");
+            const memories: string[] = raw ? JSON.parse(raw) : [];
+            if (!memories.includes(text)) {
+              memories.push(text);
+              localStorage.setItem("ara_memories", JSON.stringify(memories));
+            }
+          } catch {}
         },
       })
     );
@@ -265,14 +272,14 @@ export function VoiceProvider({
 
   const fetchMemories = useCallback(async (): Promise<string[]> => {
     try {
-      const res = await fetch(`${apiBaseUrl}/memory/`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return (data.memories ?? []).map((m: { text: string }) => m.text);
+      const raw = localStorage.getItem("ara_memories");
+      if (!raw) return [];
+      const memories = JSON.parse(raw);
+      return Array.isArray(memories) ? memories : [];
     } catch {
       return [];
     }
-  }, [apiBaseUrl]);
+  }, []);
 
   const getRealtimeToken = useCallback(async (): Promise<{ token: string | null; error?: string }> => {
     try {

@@ -116,25 +116,19 @@ export async function startGrokRealtimeVoice(
     } catch {}
   };
 
-  async function handleFunctionCall(name: string, callId: string, args: string) {
+  function handleFunctionCall(name: string, callId: string, args: string) {
     if (name === "store_memory") {
       try {
         const parsed = JSON.parse(args);
         const text = parsed.text ?? "";
         if (text) {
-          const res = await fetch(`${apiBaseUrl}/memory/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-          });
-          const ok = res.ok;
           onMemoryStored?.(text);
           ws.send(JSON.stringify({
             type: "conversation.item.create",
             item: {
               type: "function_call_output",
               call_id: callId,
-              output: JSON.stringify({ success: ok, text }),
+              output: JSON.stringify({ success: true, stored: text }),
             },
           }));
           ws.send(JSON.stringify({ type: "response.create" }));
