@@ -90,10 +90,21 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
           const result = await spotify.search("latin indie", apiUrl);
           addLog(`Found: ${result.name} (${result.uri})`);
 
-          addLog("Waking speaker + Spotify Connect...");
+          addLog("Trying Sonos UPnP (sid=12)...");
+          try {
+            const sonos = await import("@/lib/sonos-client");
+            const msg = await sonos.playSpotify(result.uri, result.name, sp.name);
+            addLog(`OK UPnP: ${msg}`);
+            setTesting(false);
+            return;
+          } catch (e) {
+            addLog(`UPnP err: ${e instanceof Error ? e.message : String(e)}`);
+          }
+
+          addLog("Trying Spotify Connect (wake+poll)...");
           try {
             const msg = await spotify.playOnDevice(result, sp.name, apiUrl);
-            addLog(`OK: ${msg}`);
+            addLog(`OK Connect: ${msg}`);
             setTesting(false);
             return;
           } catch (e) {
@@ -101,15 +112,6 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
           }
         } catch (e) {
           addLog(`Search err: ${e instanceof Error ? e.message : String(e)}`);
-        }
-
-        addLog("Trying Sonos UPnP...");
-        try {
-          const sonos = await import("@/lib/sonos-client");
-          const msg = await sonos.playSpotify("spotify:playlist:37i9dQZF1DX745Hk3hkznA", "latin indie", sp.name);
-          addLog(`OK UPnP: ${msg}`);
-        } catch (e) {
-          addLog(`UPnP err: ${e instanceof Error ? e.message : String(e)}`);
         }
       } else {
         addLog("No Spotify. Trying resume...");

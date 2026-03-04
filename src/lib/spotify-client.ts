@@ -166,6 +166,7 @@ function findDevice(devices: SpotifyDevice[], roomName?: string): SpotifyDevice 
 
 /**
  * Play a Spotify URI on a Sonos speaker via Spotify Connect.
+ * Only targets Speaker-type devices — never phones/computers.
  * Wakes the speaker via Sonos SOAP first so it appears in the device list.
  */
 export async function playOnDevice(
@@ -189,27 +190,22 @@ export async function playOnDevice(
     }
   } catch { /* speaker wake failed, continue anyway */ }
 
-  // Poll for the speaker to appear in Spotify (up to 3 attempts)
+  // Poll for a Speaker-type device only (never phones/computers)
   let targetDevice: SpotifyDevice | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
     const devices = await getDevices(token);
-    targetDevice = findDevice(devices, roomName);
-    if (targetDevice && targetDevice.type === "Speaker") break;
-    if (devices.some((d) => d.type === "Speaker")) {
-      targetDevice = devices.find((d) => d.type === "Speaker");
+    const speakers = devices.filter((d) => d.type === "Speaker");
+    if (speakers.length) {
+      const lower = (roomName ?? "").toLowerCase();
+      targetDevice = speakers.find((d) => d.name.toLowerCase().includes(lower))
+        ?? speakers[0];
       break;
     }
     if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
   }
 
   if (!targetDevice) {
-    const devices = await getDevices(token);
-    if (devices.length) {
-      targetDevice = findDevice(devices, roomName);
-    }
-    if (!targetDevice) {
-      throw new Error("No Spotify devices found after waking speaker. Is Spotify linked in the Sonos app?");
-    }
+    throw new Error("No Sonos speakers found in Spotify Connect. Falling back to direct control.");
   }
 
   const res = await fetch(`${SPOTIFY_API}/me/player/play?device_id=${targetDevice.id}`, {

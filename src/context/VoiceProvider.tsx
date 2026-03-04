@@ -204,17 +204,17 @@ export function VoiceProvider({
               } catch (e) {
                 return `Spotify search failed: ${e instanceof Error ? e.message : String(e)}`;
               }
-              // Try Spotify Connect
+              // Try Sonos UPnP first (direct, fast, uses correct service ID)
+              try {
+                return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+              } catch (e) {
+                errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
+              }
+              // Fall back to Spotify Connect (wakes speaker, polls for it)
               try {
                 return await spotify.playOnDevice(searchResult, device, apiBaseUrl);
               } catch (e) {
                 errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
-              }
-              // Fall back to Sonos UPnP
-              try {
-                return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
-              } catch (e) {
-                errors.push(`Sonos: ${e instanceof Error ? e.message : String(e)}`);
               }
               return `Could not play "${searchResult.name}". ${errors.join(". ")}`;
             }
