@@ -7,12 +7,14 @@ export function AppHeaderTitle() {
   const pathname = usePathname();
   const isHome = !pathname || pathname === "/" || pathname === "";
 
+  if (isHome) return null;
+
   return (
     <Link
       href="/"
       className="text-xl font-semibold tracking-tight"
     >
-      {isHome ? "Casa de Schwarz" : "Jesse Home Assistant"}
+      Jesse Home Assistant
     </Link>
   );
 }

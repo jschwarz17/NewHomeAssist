@@ -16,7 +16,7 @@ export function FintechNewsWidget() {
 
   useEffect(() => {
     const base = getWidgetsBase();
-    const url = base ? `${base}/api/widgets/fintech-news` : "/api/widgets/fintech-news";
+    const url = base ? `${base}/api/widgets/fintech-news/` : "/api/widgets/fintech-news";
     fetch(url)
       .then((res) => res.ok ? res.json() : { stories: [] })
       .then((data) => {

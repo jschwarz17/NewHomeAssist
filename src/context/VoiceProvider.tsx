@@ -29,11 +29,18 @@ interface VoiceProviderProps {
 const PORCUPINE_MODEL = { publicPath: "/porcupine_params.pv" };
 const WAKE_WORD_LABEL = "hey_ara";
 
-function buildVoiceInstructions(speakerId: SpeakerId): string {
-  const base = "You are Ara, a warm and friendly home assistant. Use Park Slope, Brooklyn for weather and location. Keep responses brief and voice-friendly (1-3 sentences). Do NOT speak until the user speaks first — wait silently for the user's question before responding.";
-  if (speakerId === "jesse") return base + " User is Jesse (fintech, dev workflow; no dairy). Always start your reply with 'Hey Jesse'.";
-  if (speakerId === "vanessa") return base + " User is Vanessa (calendar, music, lifestyle). Always start your reply with 'Hey Vanessa'.";
-  return base + " Be friendly and concise.";
+function buildVoiceInstructions(speakerId: SpeakerId, memories: string[]): string {
+  let base = "You are Ara, a warm and friendly home assistant for Casa de los Schwarzes. Use Park Slope, Brooklyn for weather and location. Keep responses brief and voice-friendly (1-3 sentences). Do NOT speak until the user speaks first — wait silently for the user's question before responding.";
+  if (speakerId === "jesse") base += " User is Jesse (fintech, dev workflow; no dairy). Always start your reply with 'Hey Jesse'.";
+  else if (speakerId === "vanessa") base += " User is Vanessa (calendar, music, lifestyle). Always start your reply with 'Hey Vanessa'.";
+  else base += " Be friendly and concise.";
+
+  base += " You have a store_memory tool. When the user asks you to remember something, use it. Confirm you've stored it.";
+
+  if (memories.length > 0) {
+    base += "\n\nThings you remember from past conversations:\n" + memories.map((m) => `- ${m}`).join("\n");
+  }
+  return base;
 }
 
 export function VoiceProvider({
@@ -144,7 +151,10 @@ export function VoiceProvider({
       return;
     }
 
-    const tokenResult = await getRealtimeToken();
+    const [tokenResult, memories] = await Promise.all([
+      getRealtimeToken(),
+      fetchMemories(),
+    ]);
     if (!tokenResult.token) {
       micStream.getTracks().forEach((t) => t.stop());
       setError(tokenResult.error || "Could not get voice token.");
@@ -153,16 +163,20 @@ export function VoiceProvider({
       return;
     }
     const token = tokenResult.token;
-    const instructions = buildVoiceInstructions(speakerId);
+    const instructions = buildVoiceInstructions(speakerId, memories);
     const stop = await import("@/lib/grok-realtime-voice").then((m) =>
       m.startGrokRealtimeVoice({
         token,
         instructions,
         stream: micStream,
+        apiBaseUrl,
         onError: (err) => {
           setError(err);
           setVoiceSessionActive(false);
           voiceSessionGuardRef.current = false;
+        },
+        onMemoryStored: (text) => {
+          console.log("[Ara] Memory stored:", text);
         },
       })
     );
@@ -248,6 +262,17 @@ export function VoiceProvider({
     },
     [apiBaseUrl, speakerId]
   );
+
+  const fetchMemories = useCallback(async (): Promise<string[]> => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/memory/`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.memories ?? []).map((m: { text: string }) => m.text);
+    } catch {
+      return [];
+    }
+  }, [apiBaseUrl]);
 
   const getRealtimeToken = useCallback(async (): Promise<{ token: string | null; error?: string }> => {
     try {

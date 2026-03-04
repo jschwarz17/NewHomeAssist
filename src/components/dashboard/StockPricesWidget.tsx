@@ -25,7 +25,7 @@ export function StockPricesWidget() {
 
   useEffect(() => {
     const base = getWidgetsBase();
-    const url = base ? `${base}/api/widgets/stocks` : "/api/widgets/stocks";
+    const url = base ? `${base}/api/widgets/stocks/` : "/api/widgets/stocks";
     fetch(url)
       .then((res) => res.ok ? res.json() : { quotes: [] })
       .then((data) => {

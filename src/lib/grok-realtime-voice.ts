@@ -1,6 +1,7 @@
 /**
  * Grok Voice Agent realtime client: connect on wake word, stream mic, play Ara's voice.
  * Uses wss://api.x.ai/v1/realtime with ephemeral token and sec-websocket-protocol for browser.
+ * Supports function calling for memory storage.
  */
 
 const SAMPLE_RATE = 24000;
@@ -43,18 +44,38 @@ function base64PCM16ToFloat32(base64: string): Float32Array {
   return float32;
 }
 
+const STORE_MEMORY_TOOL = {
+  type: "function",
+  name: "store_memory",
+  description:
+    "Store a fact, preference, or piece of information that the user wants you to remember for future conversations. " +
+    "Call this whenever the user says 'remember', 'don't forget', 'keep in mind', or expresses something they want retained.",
+  parameters: {
+    type: "object",
+    properties: {
+      text: {
+        type: "string",
+        description: "The fact or information to remember, written as a clear statement.",
+      },
+    },
+    required: ["text"],
+  },
+};
+
 export interface GrokRealtimeOptions {
   token: string;
   instructions: string;
   stream: MediaStream;
+  apiBaseUrl: string;
   onTranscript?: (text: string) => void;
   onError?: (err: string) => void;
+  onMemoryStored?: (text: string) => void;
 }
 
 export async function startGrokRealtimeVoice(
   options: GrokRealtimeOptions
 ): Promise<() => void> {
-  const { token, instructions, stream, onTranscript, onError } = options;
+  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored } = options;
   if (!token) {
     onError?.("No realtime token");
     return () => {};
@@ -87,6 +108,43 @@ export async function startGrokRealtimeVoice(
     } catch {}
   };
 
+  async function handleFunctionCall(name: string, callId: string, args: string) {
+    if (name === "store_memory") {
+      try {
+        const parsed = JSON.parse(args);
+        const text = parsed.text ?? "";
+        if (text) {
+          const res = await fetch(`${apiBaseUrl}/memory/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          const ok = res.ok;
+          onMemoryStored?.(text);
+          ws.send(JSON.stringify({
+            type: "conversation.item.create",
+            item: {
+              type: "function_call_output",
+              call_id: callId,
+              output: JSON.stringify({ success: ok, text }),
+            },
+          }));
+          ws.send(JSON.stringify({ type: "response.create" }));
+          return;
+        }
+      } catch {}
+    }
+    ws.send(JSON.stringify({
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: callId,
+        output: JSON.stringify({ success: false, error: "Unknown function" }),
+      },
+    }));
+    ws.send(JSON.stringify({ type: "response.create" }));
+  }
+
   ws.onerror = () => {
     onError?.("Voice connection error");
     stop();
@@ -104,6 +162,7 @@ export async function startGrokRealtimeVoice(
           voice: "Ara",
           instructions,
           turn_detection: { type: "server_vad" },
+          tools: [STORE_MEMORY_TOOL],
           audio: {
             input: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },
             output: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },
@@ -171,6 +230,9 @@ export async function startGrokRealtimeVoice(
           break;
         case "response.output_audio_transcript.delta":
           if (data.delta && onTranscript) onTranscript(data.delta);
+          break;
+        case "response.function_call_arguments.done":
+          handleFunctionCall(data.name, data.call_id, data.arguments);
           break;
         case "error":
           onError?.(data.message ?? "Voice error");

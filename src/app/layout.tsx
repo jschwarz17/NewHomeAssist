@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
-import { AppHeaderTitle } from "@/components/AppHeaderTitle";
-import { Nav } from "@/components/Nav";
+import { LayoutHeader } from "@/components/LayoutHeader";
 import { VoiceProviderWrapper } from "@/components/VoiceProviderWrapper";
 import "./globals.css";
 
@@ -17,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Home Assist",
+  title: "Casa de los Schwarzes",
   description: "Home assistant brain – control and automate your home",
 };
 
@@ -33,10 +31,7 @@ export default function RootLayout({
       >
         <VoiceProviderWrapper>
           <div className="min-h-screen flex flex-col">
-            <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-              <AppHeaderTitle />
-              <Nav />
-            </header>
+            <LayoutHeader />
             {children}
           </div>
         </VoiceProviderWrapper>

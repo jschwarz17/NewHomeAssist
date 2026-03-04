@@ -8,56 +8,39 @@ import { ElegantShoesWidget } from "@/components/dashboard/ElegantShoesWidget";
 
 export default function HomePage() {
   return (
-    // MAIN CONTAINER: Pure black background, full-height, white text
-    <main className="min-h-screen bg-black text-white font-sans p-6 md:p-10">
-      {/* 1. HEADER AREA: Centered, prominent title */}
-      <header className="relative text-center py-8 border-b border-zinc-900 mb-10">
-        <h1 className="text-4xl md:text-5xl font-extralight tracking-tight">
-          Casa de Schwarz
-        </h1>
-        <div className="absolute top-10 left-10 h-2 w-2 rounded-full bg-cyan-400 animate-pulse hidden md:block" />
-      </header>
+    <main className="h-screen bg-black text-white font-sans px-6 pt-3 pb-2 flex flex-col overflow-hidden">
+      {/* Title */}
+      <h1 className="text-3xl font-extralight tracking-tight text-center mb-3">
+        Casa de los Schwarzes
+      </h1>
 
-      {/* 2. THE DASHBOARD: Two columns — Jesse left, Vane right */}
-      <div className="grid grid-cols-2 gap-x-12 relative min-h-[60vh]">
-        <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-zinc-800" />
-
-        {/* --- LEFT: Jesse's stuff --- */}
-        <section className="col-span-1 pr-6 border-r border-transparent space-y-6">
-          <div className="text-center md:text-left">
-            <h2 className="text-2xl font-light text-zinc-300 tracking-wide uppercase mb-6">
-              Jesse&apos;s stuff
-            </h2>
-          </div>
+      {/* Dashboard grid: 3 columns — Jesse | Vane | Voice */}
+      <div className="flex-1 grid grid-cols-[1fr_1fr_280px] gap-x-6 min-h-0">
+        {/* LEFT: Jesse */}
+        <section className="flex flex-col gap-3 min-h-0 overflow-y-auto pr-3 border-r border-zinc-800">
+          <h2 className="text-sm font-light text-zinc-400 tracking-wide uppercase">
+            Jesse&apos;s stuff
+          </h2>
           <FintechNewsWidget />
           <IndieRockNewsWidget />
           <StockPricesWidget />
         </section>
 
-        {/* --- RIGHT: Vane's stuff --- */}
-        <section className="col-span-1 pl-6 space-y-6">
-          <div className="text-center md:text-right">
-            <h2 className="text-2xl font-light text-zinc-300 tracking-wide uppercase mb-6">
-              Vane&apos;s stuff
-            </h2>
-          </div>
+        {/* CENTER: Vane */}
+        <section className="flex flex-col gap-3 min-h-0 overflow-y-auto px-3 border-r border-zinc-800">
+          <h2 className="text-sm font-light text-zinc-400 tracking-wide uppercase">
+            Vane&apos;s stuff
+          </h2>
           <GlamourCoverWidget />
           <HealthyBabyTipsWidget />
           <ElegantShoesWidget />
         </section>
+
+        {/* RIGHT: Voice */}
+        <section className="flex flex-col min-h-0">
+          <VoicePanel />
+        </section>
       </div>
-
-      {/* Voice: start listening, then say "Hi Ara" or "Porcupine" */}
-      <section className="mt-8 max-w-xl">
-        <VoicePanel />
-      </section>
-
-      {/* FOOTER AREA (For Voice Feedback) */}
-      <footer className="fixed bottom-0 left-0 right-0 p-6 bg-black border-t border-zinc-900 mt-10">
-        <div className="w-full h-8 rounded-full bg-zinc-950 border border-zinc-900 flex items-center px-4 font-mono text-xs text-zinc-600">
-          CasaDeSchwarz.local :: ::...
-        </div>
-      </footer>
     </main>
   );
 }

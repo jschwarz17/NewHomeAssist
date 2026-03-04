@@ -22,7 +22,7 @@ export function HealthyBabyTipsWidget() {
 
   useEffect(() => {
     const base = getWidgetsBase();
-    const url = base ? `${base}/api/widgets/baby-tips` : "/api/widgets/baby-tips";
+    const url = base ? `${base}/api/widgets/baby-tips/` : "/api/widgets/baby-tips";
     fetch(url)
       .then((res) => res.ok ? res.json() : { article: null })
       .then((data) => {

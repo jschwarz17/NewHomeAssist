@@ -16,7 +16,7 @@ export function IndieRockNewsWidget() {
 
   useEffect(() => {
     const base = getWidgetsBase();
-    const url = base ? `${base}/api/widgets/indie-rock-news` : "/api/widgets/indie-rock-news";
+    const url = base ? `${base}/api/widgets/indie-rock-news/` : "/api/widgets/indie-rock-news";
     fetch(url)
       .then((res) => res.ok ? res.json() : { story: null })
       .then((data) => {

@@ -16,7 +16,7 @@ export function GlamourCoverWidget() {
 
   useEffect(() => {
     const base = getWidgetsBase();
-    const url = base ? `${base}/api/widgets/glamour-cover` : "/api/widgets/glamour-cover";
+    const url = base ? `${base}/api/widgets/glamour-cover/` : "/api/widgets/glamour-cover";
     fetch(url)
       .then((res) => res.ok ? res.json() : { image: null })
       .then((data) => setImage(data.image ?? null))
@@ -35,15 +35,15 @@ export function GlamourCoverWidget() {
         className="block p-2 w-full"
       >
         {loading ? (
-          <div className="w-80 h-[26rem] mx-auto rounded bg-zinc-800 animate-pulse" />
+          <div className="w-48 h-60 mx-auto rounded bg-zinc-800 animate-pulse" />
         ) : image ? (
           <img
             src={image}
             alt="Glamour magazine cover"
-            className="w-80 h-auto mx-auto rounded object-cover"
+            className="w-48 h-auto mx-auto rounded object-cover"
           />
         ) : (
-          <span className="block w-80 mx-auto text-center text-sm text-zinc-400 py-8">
+          <span className="block w-48 mx-auto text-center text-sm text-zinc-400 py-4">
             Glamour
           </span>
         )}

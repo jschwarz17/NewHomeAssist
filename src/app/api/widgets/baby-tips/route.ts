@@ -13,21 +13,36 @@ function json(data: object, status = 200) {
   return NextResponse.json(data, { status, headers: CORS_HEADERS });
 }
 
-/** One real article about baby health; return title, url, and first few lines (description or content excerpt). */
+const NEGATIVE_KEYWORDS = [
+  "obesity", "obese", "death", "dies", "died", "fatal", "kill",
+  "abuse", "neglect", "lawsuit", "recall", "warning", "danger",
+  "crisis", "epidemic", "famine", "drought", "war", "conflict",
+  "poverty", "malnutrition", "starv", "disease outbreak",
+];
+
+function isPositiveArticle(article: { title?: string; description?: string }): boolean {
+  const text = `${article.title ?? ""} ${article.description ?? ""}`.toLowerCase();
+  return !NEGATIVE_KEYWORDS.some((kw) => text.includes(kw));
+}
+
 export async function GET() {
   const key = process.env.NEWS_API_KEY ?? "";
   if (!key) {
     return json({ error: "NEWS_API_KEY not set", article: null });
   }
   try {
+    const query = encodeURIComponent(
+      '"baby tips" OR "newborn care" OR "infant development" OR "baby milestones" OR "baby nutrition"'
+    );
     const res = await fetch(
-      "https://newsapi.org/v2/everything?q=healthy+baby+tips+OR+infant+health&language=en&sortBy=publishedAt&pageSize=3&apiKey=" + key,
+      `https://newsapi.org/v2/everything?q=${query}&language=en&sortBy=publishedAt&pageSize=10&apiKey=${key}`,
       { next: { revalidate: 3600 } }
     );
     if (!res.ok) return json({ article: null });
     const data = await res.json();
-    const a = (data.articles ?? []).find(
-      (x: { title?: string; url?: string; description?: string }) => x.title && x.url
+    const articles = (data.articles ?? []) as { title?: string; url?: string; description?: string; source?: { name?: string } }[];
+    const a = articles.find(
+      (x) => x.title && x.url && isPositiveArticle(x)
     );
     if (!a) return json({ article: null });
     const description = (a.description ?? "").trim();
