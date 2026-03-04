@@ -283,6 +283,7 @@ export async function diagnoseSpeaker(ip: string): Promise<string[]> {
     lines.push(`GetString err: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  clearSpotifyServiceCache();
   const info = await getSpotifyServiceInfo(ip);
   lines.push(`using: sid=${info.sid} sn=${info.sn} token=${info.accountToken}`);
 
@@ -361,7 +362,7 @@ async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
     if (cached) return JSON.parse(cached);
   } catch { /* ignore */ }
 
-  const info: SpotifyServiceInfo = { sid: "9", sn: "1", accountToken: "SA_RINCON2311_X_#Svc2311-0-Token" };
+  const info: SpotifyServiceInfo = { sid: "12", sn: "1", accountToken: "SA_RINCON3079_X_#Svc3079-0-Token" };
 
   try {
     const svcXml = await soapRequest(
@@ -377,6 +378,10 @@ async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
       ?? decoded.match(/Id>(\d+)<[^]*?Name>Spotify/i);
     if (sidMatch) info.sid = sidMatch[1];
   } catch { /* use defaults */ }
+
+  // Derive account token from discovered sid: RINCON number = sid * 256 + 7
+  const rincon = parseInt(info.sid) * 256 + 7;
+  info.accountToken = `SA_RINCON${rincon}_X_#Svc${rincon}-0-Token`;
 
   try {
     const acctXml = await soapRequest(
@@ -408,6 +413,10 @@ async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
     }
   } catch { /* not critical */ }
 
+  // #region agent log
+  console.log(`[sonos-debug] serviceInfo: sid=${info.sid} sn=${info.sn} token=${info.accountToken} rincon=${rincon}`);
+  // #endregion
+
   try { localStorage.setItem(SPOTIFY_SVC_CACHE_KEY, JSON.stringify(info)); } catch { /* ignore */ }
   return info;
 }
@@ -428,6 +437,10 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
   const svc = await getSpotifyServiceInfo(speaker.ip);
   const encodedUri = uri.replace(/:/g, "%3a");
   const errors: string[] = [];
+
+  // #region agent log
+  console.log(`[sonos-debug] playSpotify: uri=${uri} sid=${svc.sid} sn=${svc.sn} token=${svc.accountToken}`);
+  // #endregion
 
   // Attempt 1: SetAVTransportURI with encoded URI + typed metadata
   try {
@@ -513,7 +526,7 @@ function buildSpotifyMetadata(uri: string, title: string, svc: SpotifyServiceInf
   const encodedUri = uri.replace(/:/g, "%3a");
 
   return (
-    `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
+    `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
     `<item id="${idPrefix}${encodedUri}" parentID="0" restricted="true">` +
     `<dc:title>${safeTitle}</dc:title>` +
     `<upnp:class>${upnpClass}</upnp:class>` +
