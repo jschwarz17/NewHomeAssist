@@ -90,38 +90,14 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
           const result = await spotify.search("latin indie", apiUrl);
           addLog(`Found: ${result.name} (${result.uri})`);
 
-          addLog("Getting Spotify devices...");
-          const token = await (async () => {
-            const raw = localStorage.getItem("spotify_tokens");
-            if (!raw) throw new Error("no tokens");
-            const t = JSON.parse(raw);
-            if (Date.now() < t.expires_at - 60000) return t.access_token;
-            const res = await fetch(`${apiUrl}/spotify/refresh/`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ refresh_token: t.refresh_token }),
-            });
-            const nt = await res.json();
-            localStorage.setItem("spotify_tokens", JSON.stringify(nt));
-            return nt.access_token;
-          })();
-          const devRes = await fetch("https://api.spotify.com/v1/me/player/devices", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const devData = await devRes.json();
-          const devices = devData.devices ?? [];
-          if (devices.length > 0) {
-            devices.forEach((d: { name: string; type: string }) => addLog(`  Device: ${d.name} (${d.type})`));
-            addLog("Trying Spotify Connect...");
-            try {
-              const msg = await spotify.playOnDevice(result, sp.name, apiUrl);
-              addLog(`OK Connect: ${msg}`);
-              setTesting(false);
-              return;
-            } catch (e) {
-              addLog(`Connect err: ${e instanceof Error ? e.message : String(e)}`);
-            }
-          } else {
-            addLog("Devices: NONE found");
+          addLog("Waking speaker + Spotify Connect...");
+          try {
+            const msg = await spotify.playOnDevice(result, sp.name, apiUrl);
+            addLog(`OK: ${msg}`);
+            setTesting(false);
+            return;
+          } catch (e) {
+            addLog(`Connect err: ${e instanceof Error ? e.message : String(e)}`);
           }
         } catch (e) {
           addLog(`Search err: ${e instanceof Error ? e.message : String(e)}`);

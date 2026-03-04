@@ -166,7 +166,7 @@ function findDevice(devices: SpotifyDevice[], roomName?: string): SpotifyDevice 
 
 /**
  * Play a Spotify URI on a Sonos speaker via Spotify Connect.
- * This is much more reliable than constructing Sonos UPnP URIs.
+ * Wakes the speaker via Sonos SOAP first so it appears in the device list.
  */
 export async function playOnDevice(
   searchResult: SpotifySearchResult,
@@ -174,62 +174,68 @@ export async function playOnDevice(
   apiBaseUrl: string
 ): Promise<string> {
   const token = await getAccessToken(apiBaseUrl);
-  const devices = await getDevices(token);
-
-  if (!devices.length) {
-    throw new Error("No Spotify Connect devices found. Make sure your Sonos speakers are on and Spotify is linked in the Sonos app.");
-  }
-
-  const device = findDevice(devices, roomName);
-  if (!device) {
-    throw new Error(`Could not find speaker "${roomName}". Available: ${devices.map((d) => d.name).join(", ")}`);
-  }
 
   const uri = searchResult.uri;
   const isContext = uri.startsWith("spotify:playlist:") || uri.startsWith("spotify:album:") || uri.startsWith("spotify:artist:");
+  const body: Record<string, unknown> = isContext ? { context_uri: uri } : { uris: [uri] };
 
-  const body: Record<string, unknown> = {};
-  if (isContext) {
-    body.context_uri = uri;
-  } else {
-    body.uris = [uri];
+  // Wake the target Sonos speaker so it registers with Spotify Connect
+  try {
+    const sonos = await import("@/lib/sonos-client");
+    const speaker = sonos.findSpeaker(roomName);
+    if (speaker) {
+      await sonos.play(speaker.name);
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  } catch { /* speaker wake failed, continue anyway */ }
+
+  // Poll for the speaker to appear in Spotify (up to 3 attempts)
+  let targetDevice: SpotifyDevice | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const devices = await getDevices(token);
+    targetDevice = findDevice(devices, roomName);
+    if (targetDevice && targetDevice.type === "Speaker") break;
+    if (devices.some((d) => d.type === "Speaker")) {
+      targetDevice = devices.find((d) => d.type === "Speaker");
+      break;
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
   }
 
-  const res = await fetch(`${SPOTIFY_API}/me/player/play?device_id=${device.id}`, {
+  if (!targetDevice) {
+    const devices = await getDevices(token);
+    if (devices.length) {
+      targetDevice = findDevice(devices, roomName);
+    }
+    if (!targetDevice) {
+      throw new Error("No Spotify devices found after waking speaker. Is Spotify linked in the Sonos app?");
+    }
+  }
+
+  const res = await fetch(`${SPOTIFY_API}/me/player/play?device_id=${targetDevice.id}`, {
     method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
   if (res.status === 404 || res.status === 502) {
-    const transferRes = await fetch(`${SPOTIFY_API}/me/player`, {
+    await fetch(`${SPOTIFY_API}/me/player`, {
       method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ device_ids: [device.id], play: false }),
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ device_ids: [targetDevice.id], play: false }),
     });
-    if (transferRes.ok || transferRes.status === 204) {
-      await new Promise((r) => setTimeout(r, 1000));
-      const retryRes = await fetch(`${SPOTIFY_API}/me/player/play?device_id=${device.id}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-      if (!retryRes.ok && retryRes.status !== 204) {
-        throw new Error(`Spotify play failed after transfer (${retryRes.status})`);
-      }
+    await new Promise((r) => setTimeout(r, 1500));
+    const retry = await fetch(`${SPOTIFY_API}/me/player/play?device_id=${targetDevice.id}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!retry.ok && retry.status !== 204) {
+      throw new Error(`Spotify play failed after transfer (${retry.status})`);
     }
   } else if (!res.ok && res.status !== 204) {
     throw new Error(`Spotify play failed (${res.status})`);
   }
 
-  return `Playing "${searchResult.name}" on ${device.name}`;
+  return `Playing "${searchResult.name}" on ${targetDevice.name}`;
 }
