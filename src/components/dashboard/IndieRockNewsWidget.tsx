@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { openLink } from "@/lib/open-link";
 
 type Story = { title: string; url: string; image: string | null };
 
@@ -37,7 +38,11 @@ export function IndieRockNewsWidget() {
           In .env.local set NEXT_PUBLIC_ASSISTANT_API_URL to your Vercel URL, then rebuild. On Vercel, set NEWS_API_KEY.
         </p>
       ) : (
-        <a href={story.url} target="_blank" rel="noopener noreferrer" className="block">
+        <button
+          type="button"
+          onClick={() => openLink(story.url)}
+          className="block w-full text-left"
+        >
           {story.image && (
             <img
               src={story.image}
@@ -48,7 +53,7 @@ export function IndieRockNewsWidget() {
           <p className="p-4 text-sm text-zinc-300 hover:text-white underline underline-offset-2">
             {story.title}
           </p>
-        </a>
+        </button>
       )}
     </div>
   );

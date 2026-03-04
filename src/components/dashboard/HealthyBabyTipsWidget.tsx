@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { openLink } from "@/lib/open-link";
 
 type Article = { title: string; url: string; excerpt: string; source?: string };
 
@@ -40,14 +41,13 @@ export function HealthyBabyTipsWidget() {
         <p className="text-sm text-zinc-500">Loading…</p>
       ) : article ? (
         <div className="space-y-2">
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-zinc-200 hover:text-white underline underline-offset-2 block"
+          <button
+            type="button"
+            onClick={() => openLink(article.url)}
+            className="text-sm font-medium text-zinc-200 hover:text-white underline underline-offset-2 block text-left"
           >
             {article.title}
-          </a>
+          </button>
           {article.excerpt && (
             <p className="text-sm text-zinc-400 leading-snug">{article.excerpt}</p>
           )}

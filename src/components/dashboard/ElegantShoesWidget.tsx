@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { openLink } from "@/lib/open-link";
 
 type Shoe = { imageUrl: string; link: string; credit?: string };
 
@@ -49,11 +50,10 @@ export function ElegantShoesWidget() {
       ) : (
         <div className="flex gap-2 justify-center flex-wrap">
           {display.slice(0, 6).map((shoe, i) => (
-            <a
+            <button
               key={i}
-              href={shoe.link}
-              target="_blank"
-              rel="noopener noreferrer"
+              type="button"
+              onClick={() => openLink(shoe.link)}
               className="block"
             >
               <img
@@ -61,7 +61,7 @@ export function ElegantShoesWidget() {
                 alt=""
                 className="w-20 h-20 rounded object-cover border border-zinc-800 hover:border-zinc-600 transition-colors"
               />
-            </a>
+            </button>
           ))}
         </div>
       )}

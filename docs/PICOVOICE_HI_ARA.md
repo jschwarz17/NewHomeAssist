@@ -1,6 +1,6 @@
 # Wake word "Hey Ara" with Picovoice
 
-The app uses **Porcupine** (Picovoice) for wake word detection and **requires** a custom "Hey Ara" (or "Hi Ara") keyword file. There is no fallback to another wake word.
+The app uses **Porcupine** (Picovoice) for wake word detection. It tries **Hey Ara** / **Hi Ara** first; if those files are missing or are the wrong platform (e.g. Android .ppn in the browser), it falls back to the built-in word **"Porcupine"** so you can still start a voice conversation. For **"Hey Ara"** in the browser, you must use the **Web (WASM)** .ppn from Picovoice.
 
 ## 1. Create the custom wake word
 

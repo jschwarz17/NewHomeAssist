@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { openLink } from "@/lib/open-link";
 
 type Story = { title: string; url: string };
 
@@ -41,14 +42,13 @@ export function FintechNewsWidget() {
         <ul className="space-y-2">
           {stories.map((s, i) => (
             <li key={i}>
-              <a
-                href={s.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-zinc-300 hover:text-white underline underline-offset-2"
+              <button
+                type="button"
+                onClick={() => openLink(s.url)}
+                className="text-sm text-zinc-300 hover:text-white underline underline-offset-2 text-left"
               >
                 {s.title}
-              </a>
+              </button>
             </li>
           ))}
         </ul>

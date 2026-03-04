@@ -68,7 +68,7 @@ export function VoiceProvider({
         return;
       }
 
-      const { Porcupine } = await import("@picovoice/porcupine-web");
+      const { Porcupine, BuiltInKeyword } = await import("@picovoice/porcupine-web");
       const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
 
       const keywordDetectionCallback = () => {
@@ -95,10 +95,18 @@ export function VoiceProvider({
             { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
           );
         } catch {
-          setError(
-            "Hey Ara wake word requires a custom keyword file. Add public/hey_ara.ppn from Picovoice Console (Porcupine → create keyword 'Hey Ara' → Web WASM). See docs/PICOVOICE_HI_ARA.md."
-          );
-          return;
+          try {
+            porcupine = await Porcupine.create(
+              picovoiceAccessKey,
+              [{ builtin: BuiltInKeyword.Porcupine, sensitivity: 0.5 }],
+              keywordDetectionCallback,
+              PORCUPINE_MODEL,
+              { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
+            );
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to load wake word");
+            return;
+          }
         }
       }
 

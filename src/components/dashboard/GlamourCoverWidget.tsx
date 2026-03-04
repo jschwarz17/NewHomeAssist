@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { openLink } from "@/lib/open-link";
 
 const GLAMOUR_LINK = "https://www.glamour.com/";
 
@@ -28,11 +29,10 @@ export function GlamourCoverWidget() {
       <h3 className="text-xs font-medium uppercase tracking-wider text-zinc-500 px-4 pt-4 pb-2">
         Glamour
       </h3>
-      <a
-        href={GLAMOUR_LINK}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block p-2"
+      <button
+        type="button"
+        onClick={() => openLink(GLAMOUR_LINK)}
+        className="block p-2 w-full"
       >
         {loading ? (
           <div className="w-28 h-36 mx-auto rounded bg-zinc-800 animate-pulse" />
@@ -47,7 +47,7 @@ export function GlamourCoverWidget() {
             Glamour
           </span>
         )}
-      </a>
+      </button>
     </div>
   );
 }
