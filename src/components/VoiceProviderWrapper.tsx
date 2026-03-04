@@ -9,7 +9,7 @@ export function VoiceProviderWrapper({
 }) {
   return (
     <VoiceProvider
-      picovoiceAccessKey={process.env.NEXT_PUBLIC_PICOVOICE_ACCESS_KEY}
+      picovoiceAccessKey={process.env.NEXT_PUBLIC_PICOVOICE_API_KEY}
       apiBaseUrl={process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "/api"}
     >
       {children}

@@ -40,8 +40,8 @@ export function VoiceProvider({
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const porcupineRef = useRef<InstanceType<typeof import("@picovoice/porcupine-web").Porcupine> | null>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const porcupineRef = useRef<unknown>(null);
+  const recognitionRef = useRef<{ abort?: () => void } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const startListening = useCallback(async () => {
@@ -51,7 +51,7 @@ export function VoiceProvider({
 
     try {
       if (!picovoiceAccessKey) {
-        setError("Picovoice access key not configured. Add NEXT_PUBLIC_PICOVOICE_ACCESS_KEY.");
+        setError("Picovoice access key not configured. Add NEXT_PUBLIC_PICOVOICE_API_KEY.");
         setIsListening(true);
         return;
       }
@@ -95,8 +95,18 @@ export function VoiceProvider({
 
   function startSpeechRecognition() {
     if (typeof window === "undefined") return;
-    const SpeechRecognitionAPI = (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
-      ?? (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    type RecognitionInstance = {
+      continuous: boolean;
+      interimResults: boolean;
+      lang: string;
+      onresult: ((e: { results: Array<{ 0?: { transcript?: string }; length: number }> }) => void) | null;
+      onerror: (() => void) | null;
+      onend: (() => void) | null;
+      start: () => void;
+      abort?: () => void;
+    };
+    const SpeechRecognitionAPI = (window as unknown as { SpeechRecognition?: new () => RecognitionInstance; webkitSpeechRecognition?: new () => RecognitionInstance }).SpeechRecognition
+      ?? (window as unknown as { webkitSpeechRecognition?: new () => RecognitionInstance }).webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
       setError("Speech recognition not supported in this browser.");
       return;
@@ -105,9 +115,9 @@ export function VoiceProvider({
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = "en-US";
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: { results: Array<{ 0?: { transcript?: string }; length: number }> }) => {
       const result = event.results[event.results.length - 1];
-      const text = result[0]?.transcript?.trim();
+      const text = result?.[0]?.transcript?.trim();
       if (text) {
         setTranscript(text);
       }
@@ -124,8 +134,9 @@ export function VoiceProvider({
     try {
       const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
       if (porcupineRef.current) {
-        await WebVoiceProcessor.unsubscribe(porcupineRef.current);
-        await porcupineRef.current.release();
+        const p = porcupineRef.current as { release: () => Promise<void> };
+        await WebVoiceProcessor.unsubscribe(p as Parameters<typeof WebVoiceProcessor.unsubscribe>[0]);
+        await p.release();
         porcupineRef.current = null;
       }
     } catch {
@@ -133,7 +144,7 @@ export function VoiceProvider({
     }
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.abort();
+        recognitionRef.current.abort?.();
       } catch {
         // ignore
       }
@@ -153,7 +164,7 @@ export function VoiceProvider({
       if (!text.trim()) return;
       setError(null);
       try {
-        const url = `${apiBaseUrl}/assistant`;
+        const url = `${apiBaseUrl}/process-request`;
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -167,9 +178,16 @@ export function VoiceProvider({
           throw new Error(err.message || `API error ${res.status}`);
         }
         const data = await res.json();
-        if (data.taskerCommand) {
+        const commands = Array.isArray(data.taskerCommands)
+          ? data.taskerCommands
+          : data.taskerCommand
+            ? [data.taskerCommand]
+            : [];
+        if (commands.length) {
           const { sendTaskerCommand } = await import("@/lib/tasker");
-          await sendTaskerCommand(data.taskerCommand.task, data.taskerCommand.value);
+          for (const c of commands) {
+            if (c?.task != null) await sendTaskerCommand(c.task, c.value ?? "");
+          }
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Assistant request failed");
