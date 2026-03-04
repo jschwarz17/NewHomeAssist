@@ -30,7 +30,7 @@ const PORCUPINE_MODEL = { publicPath: "/porcupine_params.pv" };
 const WAKE_WORD_LABEL = "hey_ara";
 
 function buildVoiceInstructions(speakerId: SpeakerId): string {
-  const base = "You are Ara, a warm and friendly home assistant. Use Park Slope, Brooklyn for weather and location. Keep responses brief and voice-friendly (1-3 sentences).";
+  const base = "You are Ara, a warm and friendly home assistant. Use Park Slope, Brooklyn for weather and location. Keep responses brief and voice-friendly (1-3 sentences). Do NOT speak until the user speaks first — wait silently for the user's question before responding.";
   if (speakerId === "jesse") return base + " User is Jesse (fintech, dev workflow; no dairy). Always start your reply with 'Hey Jesse'.";
   if (speakerId === "vanessa") return base + " User is Vanessa (calendar, music, lifestyle). Always start your reply with 'Hey Vanessa'.";
   return base + " Be friendly and concise.";

@@ -70,6 +70,7 @@ export async function startGrokRealtimeVoice(
   let closed = false;
 
   const stop = () => {
+    if (closed) return;
     closed = true;
     try {
       ws.close();
