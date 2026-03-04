@@ -90,7 +90,7 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
           const result = await spotify.search("latin indie", apiUrl);
           addLog(`Found: ${result.name} (${result.uri})`);
 
-          addLog("Trying Sonos UPnP (sid=12)...");
+          addLog("Trying Sonos UPnP...");
           try {
             const sonos = await import("@/lib/sonos-client");
             const msg = await sonos.playSpotify(result.uri, result.name, sp.name);
