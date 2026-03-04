@@ -27,7 +27,7 @@ interface VoiceProviderProps {
 }
 
 const PORCUPINE_MODEL = { publicPath: "/porcupine_params.pv" };
-const WAKE_WORD_LABEL = "hi_ara";
+const WAKE_WORD_LABEL = "hey_ara";
 
 export function VoiceProvider({
   children,
@@ -38,6 +38,7 @@ export function VoiceProvider({
   const [wakeWordDetected, setWakeWordDetected] = useState(false);
   const [speakerId, setSpeakerId] = useState<SpeakerId>(null);
   const [transcript, setTranscript] = useState("");
+  const [lastResponse, setLastResponse] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const porcupineRef = useRef<unknown>(null);
@@ -48,6 +49,7 @@ export function VoiceProvider({
     setError(null);
     setWakeWordDetected(false);
     setTranscript("");
+    setLastResponse(null);
 
     try {
       if (!picovoiceAccessKey) {
@@ -68,19 +70,29 @@ export function VoiceProvider({
       try {
         porcupine = await Porcupine.create(
           picovoiceAccessKey,
-          [{ publicPath: "/hi_ara.ppn", label: WAKE_WORD_LABEL, sensitivity: 0.5 }],
+          [{ publicPath: "/hey_ara.ppn", label: WAKE_WORD_LABEL, sensitivity: 0.5 }],
           keywordDetectionCallback,
           PORCUPINE_MODEL,
           { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
         );
       } catch {
-        porcupine = await Porcupine.create(
-          picovoiceAccessKey,
-          [{ builtin: BuiltInKeyword.Porcupine, sensitivity: 0.5 }],
-          keywordDetectionCallback,
-          PORCUPINE_MODEL,
-          { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
-        );
+        try {
+          porcupine = await Porcupine.create(
+            picovoiceAccessKey,
+            [{ publicPath: "/hi_ara.ppn", label: WAKE_WORD_LABEL, sensitivity: 0.5 }],
+            keywordDetectionCallback,
+            PORCUPINE_MODEL,
+            { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
+          );
+        } catch {
+          porcupine = await Porcupine.create(
+            picovoiceAccessKey,
+            [{ builtin: BuiltInKeyword.Porcupine, sensitivity: 0.5 }],
+            keywordDetectionCallback,
+            PORCUPINE_MODEL,
+            { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
+          );
+        }
       }
 
       porcupineRef.current = porcupine;
@@ -186,6 +198,7 @@ export function VoiceProvider({
           throw new Error(err.message || `API error ${res.status}`);
         }
         const data = await res.json();
+        if (data.response) setLastResponse(data.response);
         const commands = Array.isArray(data.taskerCommands)
           ? data.taskerCommands
           : data.taskerCommand
@@ -215,6 +228,11 @@ export function VoiceProvider({
     }
   }, [apiBaseUrl]);
 
+  // Auto-start wake word listening when the app loads (no tap required)
+  useEffect(() => {
+    if (picovoiceAccessKey) startListening();
+  }, [picovoiceAccessKey]); // eslint-disable-line react-hooks/exhaustive-deps -- start on key only
+
   useEffect(() => {
     return () => {
       stopListening();
@@ -226,6 +244,7 @@ export function VoiceProvider({
     wakeWordDetected,
     speakerId,
     transcript,
+    lastResponse,
     error,
     startListening,
     stopListening,

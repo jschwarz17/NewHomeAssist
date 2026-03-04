@@ -36,19 +36,19 @@ The Android app receives the key from the WebView when you start listening (pass
 
 ### 3. Enroll each speaker (one-time)
 
-Eagle needs a voice profile per user. The app exposes the Eagle plugin to the web layer; you can add a **Settings → Voice → Enroll speakers** flow that calls:
+Eagle needs a voice profile per user. **In the Android app:** open **Settings** and use the **Voice ID (Eagle)** section:
 
-- `Eagle.enrollSpeaker({ speakerId: 'jesse', accessKey: '<your-key>' })`  
-- Then have Jesse speak for ~5 seconds in a quiet room.  
-- Repeat with `speakerId: 'vanessa'` for Vanessa.
+1. Tap **Enroll Jesse** — Jesse speaks for a few seconds in a quiet room until enrollment reaches 100%.
+2. Tap **Enroll Vanessa** — Vanessa does the same.
 
-Until enrollment is implemented in the UI, you can trigger it from the browser console when running on Android (replace with your key):
+Both must be enrolled before recognition works. The section shows “enrolled” next to each name when done.
+
+**Alternative (console):** When running on Android, you can still enroll from the WebView console (e.g. via Chrome remote debugging) if needed:
 
 ```javascript
 const { Capacitor } = await import('@capacitor/core');
 await Capacitor.Plugins.Eagle.enrollSpeaker({ speakerId: 'jesse', accessKey: 'YOUR_PICOVOICE_ACCESS_KEY' });
-// Speak for a few seconds, then:
-await Capacitor.Plugins.Eagle.enrollSpeaker({ speakerId: 'vanessa', accessKey: 'YOUR_PICOVOICE_ACCESS_KEY' });
+// Speak for a few seconds, then repeat for vanessa.
 ```
 
 ### 4. Use voice as usual

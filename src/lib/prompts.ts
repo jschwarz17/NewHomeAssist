@@ -6,6 +6,17 @@ import type { UserContext } from "./learning-engine";
 import type { TaskerConfig } from "@/types";
 import { formatCapabilitiesForClaude } from "./config-loader";
 
+/** Always use this location for weather and any location-based queries. */
+const DEFAULT_LOCATION = "Park Slope, Brooklyn";
+
+/** Default music: device, service, and playlist when user says "play music" with no artist. */
+const MUSIC_DEFAULTS = `
+- Default music device: Sonos Living Room.
+- Default service: Spotify.
+- When the user says "play music" with no artist, play the Latin indie playlist on Spotify on Sonos Living Room.
+- When the user names an artist (e.g. "play Bad Bunny"), play that artist on Spotify on Sonos Living Room.
+`.trim();
+
 const JESSE_STATIC = `
 - Interests: fintech metrics, GitHub updates, developer workflow.
 - Dietary: no cheese, no dairy. When suggesting food or recipes, avoid dairy and cheese.
@@ -33,13 +44,20 @@ export function buildGrokSystemPrompt(
 ): string {
   const parts: string[] = [
     "You are Ara, a warm and friendly home assistant. You are having a conversation only—no home automation or device control in this chat.",
+    `Location: Always use ${DEFAULT_LOCATION} for weather, time, or any location-based questions (e.g. "What's the weather today?" means weather in ${DEFAULT_LOCATION}).`,
     getUserTone(userId ?? undefined, context),
     getResponseLength(context),
   ];
 
-  if (userId === "jesse") parts.push("\nUser context (Jesse):\n" + JESSE_STATIC);
-  else if (userId === "vanessa") parts.push("\nUser context (Vanessa):\n" + VANESSA_STATIC);
-  else parts.push("\nThe user has not been identified. Be friendly and concise.");
+  if (userId === "jesse") {
+    parts.push("\nUser context (Jesse):\n" + JESSE_STATIC);
+    parts.push("\nWhen responding to Jesse, always start your reply with 'Hey Jesse'.");
+  } else if (userId === "vanessa") {
+    parts.push("\nUser context (Vanessa):\n" + VANESSA_STATIC);
+    parts.push("\nWhen responding to Vanessa, always start your reply with 'Hey Vanessa'.");
+  } else {
+    parts.push("\nThe user has not been identified. Be friendly and concise. Do not start with a name greeting.");
+  }
 
   if (context?.preferences && Object.keys(context.preferences).length) {
     parts.push("\nLearned preferences (conversation only): " + JSON.stringify(context.preferences));
@@ -55,14 +73,24 @@ export function buildClaudeSystemPrompt(
 ): string {
   const parts: string[] = [
     "You are Ara, a voice-first home assistant. Your job is to fulfill home automation and task requests. Use the tools provided to execute Tasker commands, open apps, or speak to the user.",
+    `Location: For any weather or location-based query, use ${DEFAULT_LOCATION}.`,
+    "Music defaults: " + MUSIC_DEFAULTS,
     "When the user asks for a home control action (lights, music, thermostat, etc.), use execute_tasker_task with the appropriate task name and value. You may call get_app_capabilities to see available tasks.",
+    "For 'play music' with no artist: use the default (Latin indie playlist on Spotify, Sonos Living Room). For 'play [artist]': use that artist on the same device.",
     "Ask clarifying questions only when necessary (e.g. which room, which device). If you have learned preferences or context, use them to avoid asking.",
     getUserTone(userId ?? undefined, userContext ?? null),
     getResponseLength(userContext ?? null),
   ];
 
-  if (userId === "jesse") parts.push("\nUser context (Jesse):\n" + JESSE_STATIC);
-  else if (userId === "vanessa") parts.push("\nUser context (Vanessa):\n" + VANESSA_STATIC);
+  if (userId === "jesse") {
+    parts.push("\nUser context (Jesse):\n" + JESSE_STATIC);
+    parts.push("\nWhen responding to Jesse, always start your reply with 'Hey Jesse'.");
+  } else if (userId === "vanessa") {
+    parts.push("\nUser context (Vanessa):\n" + VANESSA_STATIC);
+    parts.push("\nWhen responding to Vanessa, always start your reply with 'Hey Vanessa'.");
+  } else {
+    parts.push("\nThe user has not been identified. Do not start your reply with a name greeting.");
+  }
 
   if (userContext?.devicePreferences && Object.keys(userContext.devicePreferences).length) {
     parts.push(

@@ -9,6 +9,8 @@ export interface VoiceState {
   wakeWordDetected: boolean;
   speakerId: SpeakerId;
   transcript: string;
+  /** Last response from Ara (so UI can show "Hey Jesse, ...") */
+  lastResponse: string | null;
   error: string | null;
 }
 

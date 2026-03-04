@@ -8,6 +8,7 @@ export function VoicePanel() {
     wakeWordDetected,
     speakerId,
     transcript,
+    lastResponse,
     error,
     startListening,
     stopListening,
@@ -18,7 +19,7 @@ export function VoicePanel() {
     <div className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-6 space-y-4">
       <h3 className="text-sm font-medium text-zinc-300">Voice</h3>
       <p className="text-xs text-zinc-500">
-        Say &quot;Hi Ara&quot; (or &quot;Porcupine&quot; if no custom keyword) after starting. Then say your command; use Send to assistant when ready.
+        Always listening for &quot;Hey Ara&quot;. Say it, then your command; use Send to assistant when ready. Tap Stop to pause wake word.
       </p>
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -28,7 +29,7 @@ export function VoicePanel() {
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             isListening
               ? "bg-red-600/80 text-white hover:bg-red-600"
-              : "bg-emerald-600 text-white hover:bg-emerald-500"
+              : "bg-zinc-600 text-white hover:bg-zinc-500"
           }`}
         >
           {isListening ? "Stop listening" : "Start listening"}
@@ -52,6 +53,10 @@ export function VoicePanel() {
             Send to assistant
           </button>
         </div>
+      )}
+
+      {lastResponse && (
+        <p className="text-sm text-zinc-300">Ara: {lastResponse}</p>
       )}
 
       {error && (

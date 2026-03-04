@@ -1,4 +1,10 @@
 import { VoicePanel } from "@/components/VoicePanel";
+import { FintechNewsWidget } from "@/components/dashboard/FintechNewsWidget";
+import { IndieRockNewsWidget } from "@/components/dashboard/IndieRockNewsWidget";
+import { StockPricesWidget } from "@/components/dashboard/StockPricesWidget";
+import { GlamourCoverWidget } from "@/components/dashboard/GlamourCoverWidget";
+import { HealthyBabyTipsWidget } from "@/components/dashboard/HealthyBabyTipsWidget";
+import { ElegantShoesWidget } from "@/components/dashboard/ElegantShoesWidget";
 
 export default function HomePage() {
   return (
@@ -9,47 +15,35 @@ export default function HomePage() {
         <h1 className="text-4xl md:text-5xl font-extralight tracking-tight">
           Casa de Schwarz
         </h1>
-        {/* Subtle, pulsing cyan dot—matches the 'fintech' vibe */}
         <div className="absolute top-10 left-10 h-2 w-2 rounded-full bg-cyan-400 animate-pulse hidden md:block" />
       </header>
 
-      {/* 2. THE DASHBOARD: A grid with two equal columns */}
+      {/* 2. THE DASHBOARD: Two columns — Jesse left, Vane right */}
       <div className="grid grid-cols-2 gap-x-12 relative min-h-[60vh]">
-        {/* THE VERTICAL DIVIDER LINE */}
         <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-px bg-zinc-800" />
 
-        {/* --- LEFT COLUMN: Jesse's Stuff --- */}
-        <section className="col-span-1 pr-6 border-r border-transparent">
+        {/* --- LEFT: Jesse's stuff --- */}
+        <section className="col-span-1 pr-6 border-r border-transparent space-y-6">
           <div className="text-center md:text-left">
-            <h2 className="text-2xl font-light text-zinc-300 tracking-wide uppercase mb-12">
+            <h2 className="text-2xl font-light text-zinc-300 tracking-wide uppercase mb-6">
               Jesse&apos;s stuff
             </h2>
           </div>
-
-          {/* Placeholder Content: We will integrate Picovoice here later */}
-          <div className="space-y-6 opacity-60">
-            <p className="font-mono text-zinc-500">
-              // Voice profiles loading... (Status:)
-            </p>
-            <div className="h-24 rounded-lg bg-zinc-950 border border-zinc-900"></div>
-          </div>
+          <FintechNewsWidget />
+          <IndieRockNewsWidget />
+          <StockPricesWidget />
         </section>
 
-        {/* --- RIGHT COLUMN: Vane's Stuff --- */}
-        <section className="col-span-1 pl-6">
+        {/* --- RIGHT: Vane's stuff --- */}
+        <section className="col-span-1 pl-6 space-y-6">
           <div className="text-center md:text-right">
-            <h2 className="text-2xl font-light text-zinc-300 tracking-wide uppercase mb-12">
+            <h2 className="text-2xl font-light text-zinc-300 tracking-wide uppercase mb-6">
               Vane&apos;s stuff
             </h2>
           </div>
-
-          {/* Placeholder Content: We will integrate Vane's calendar/music here */}
-          <div className="space-y-6 opacity-60">
-            <p className="font-mono text-zinc-500">
-              // Speaker ID inactive. (Enroll Vanessa&apos;s Profile)
-            </p>
-            <div className="h-24 rounded-lg bg-zinc-950 border border-zinc-900"></div>
-          </div>
+          <GlamourCoverWidget />
+          <HealthyBabyTipsWidget />
+          <ElegantShoesWidget />
         </section>
       </div>
 

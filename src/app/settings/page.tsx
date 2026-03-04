@@ -1,3 +1,5 @@
+import { EagleEnrollSection } from "@/components/settings/EagleEnrollSection";
+
 export default function SettingsPage() {
   return (
     <main className="flex-1 max-w-2xl mx-auto w-full px-6 py-12">
@@ -6,6 +8,7 @@ export default function SettingsPage() {
       <p className="text-zinc-500 mt-6">
         Connect smart home platforms, configure the brain, and manage users.
       </p>
+      <EagleEnrollSection />
     </main>
   );
 }
