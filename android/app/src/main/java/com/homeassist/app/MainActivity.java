@@ -29,15 +29,23 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
+    private final ActivityResultLauncher<String> startupMicLauncher =
+        registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+            // Permission result handled; nothing else needed on startup
+        });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(TaskerPlugin.class);
         registerPlugin(EaglePlugin.class);
         super.onCreate(savedInstanceState);
 
-        WebView webView = getBridge().getWebView();
-        final WebChromeClient originalClient = new WebChromeClient();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            startupMicLauncher.launch(Manifest.permission.RECORD_AUDIO);
+        }
 
+        WebView webView = getBridge().getWebView();
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(PermissionRequest request) {
@@ -53,7 +61,7 @@ public class MainActivity extends BridgeActivity {
                         return;
                     }
                 }
-                request.deny();
+                request.grant(request.getResources());
             }
         });
     }
