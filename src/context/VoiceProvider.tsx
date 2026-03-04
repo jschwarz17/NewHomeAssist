@@ -195,41 +195,27 @@ export function VoiceProvider({
         },
         onPlayMusic: async (query, device) => {
           try {
-            const res = await fetch(`${apiBaseUrl}/sonos/play/`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query, device }),
-            });
-            const data = await res.json();
-            return data.message ?? "Music request sent";
-          } catch {
-            return "Could not reach Sonos. Make sure the server is running locally.";
+            const sonos = await import("@/lib/sonos-client");
+            const result = await sonos.play(device);
+            return `${result} — "${query}"`;
+          } catch (e) {
+            return e instanceof Error ? e.message : "Could not play music";
           }
         },
         onPauseMusic: async (device) => {
           try {
-            const res = await fetch(`${apiBaseUrl}/sonos/pause/`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ device }),
-            });
-            const data = await res.json();
-            return data.message ?? "Paused";
-          } catch {
-            return "Could not reach Sonos";
+            const sonos = await import("@/lib/sonos-client");
+            return await sonos.pause(device);
+          } catch (e) {
+            return e instanceof Error ? e.message : "Could not pause";
           }
         },
         onSetVolume: async (volume, device) => {
           try {
-            const res = await fetch(`${apiBaseUrl}/sonos/volume/`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ volume, device }),
-            });
-            const data = await res.json();
-            return data.message ?? `Volume set to ${volume}`;
-          } catch {
-            return "Could not reach Sonos";
+            const sonos = await import("@/lib/sonos-client");
+            return await sonos.setVolume(volume, device);
+          } catch (e) {
+            return e instanceof Error ? e.message : "Could not set volume";
           }
         },
         onPlayYouTube: async (query) => {
