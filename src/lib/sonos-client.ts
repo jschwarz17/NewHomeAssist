@@ -112,20 +112,73 @@ export async function setAVTransportURI(uri: string, roomName?: string): Promise
 
 /**
  * Discover all speakers on the network by querying one known speaker
- * for its ZoneGroupTopology.
+ * for its ZoneGroupTopology via SOAP (most reliable method).
  */
 export async function discoverFromDevice(ip: string): Promise<SonosSpeaker[]> {
-  const res = await fetch(`http://${ip}:${SONOS_PORT}/status/topology`, {
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) throw new Error(`Could not reach speaker at ${ip}`);
-  const xml = await res.text();
-
   const speakers: SonosSpeaker[] = [];
-  const playerRegex = /<ZonePlayer\s[^>]*?location="http:\/\/([^:]+):\d+"[^>]*?name="([^"]*)"[^>]*?\/?>/gi;
-  let match;
-  while ((match = playerRegex.exec(xml)) !== null) {
-    speakers.push({ ip: match[1], name: match[2] });
+
+  try {
+    const soapBody =
+      `<?xml version="1.0" encoding="utf-8"?>` +
+      `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">` +
+      `<s:Body><u:GetZoneGroupState xmlns:u="urn:schemas-upnp-org:service:ZoneGroupTopology:1"></u:GetZoneGroupState></s:Body>` +
+      `</s:Envelope>`;
+
+    const res = await fetch(`http://${ip}:${SONOS_PORT}/ZoneGroupTopology/Control`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: '"urn:schemas-upnp-org:service:ZoneGroupTopology:1#GetZoneGroupState"',
+      },
+      body: soapBody,
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) throw new Error("SOAP failed");
+    let xml = await res.text();
+
+    xml = xml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+
+    const memberRegex = /<ZoneGroupMember\s[^>]*?>/gi;
+    let match;
+    while ((match = memberRegex.exec(xml)) !== null) {
+      const tag = match[0];
+      const locMatch = tag.match(/Location="http:\/\/([^:]+):\d+/i);
+      const nameMatch = tag.match(/ZoneName="([^"]*)"/i);
+      if (locMatch && nameMatch) {
+        const memberIp = locMatch[1];
+        const name = nameMatch[1];
+        if (!speakers.some((s) => s.ip === memberIp)) {
+          speakers.push({ ip: memberIp, name });
+        }
+      }
+    }
+  } catch {
+    // Fallback: try /status/topology
+    try {
+      const res = await fetch(`http://${ip}:${SONOS_PORT}/status/topology`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) {
+        const xml = await res.text();
+        const playerRegex = /<ZonePlayer[^>]+>/gi;
+        let match;
+        while ((match = playerRegex.exec(xml)) !== null) {
+          const tag = match[0];
+          const locMatch = tag.match(/location="http:\/\/([^:]+):\d+/i);
+          const nameMatch = tag.match(/name="([^"]*)"/i);
+          if (locMatch && nameMatch) {
+            const memberIp = locMatch[1];
+            const name = nameMatch[1];
+            if (!speakers.some((s) => s.ip === memberIp)) {
+              speakers.push({ ip: memberIp, name });
+            }
+          }
+        }
+      }
+    } catch {
+      // both methods failed
+    }
   }
 
   if (!speakers.length) {
