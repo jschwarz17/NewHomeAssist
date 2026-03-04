@@ -133,8 +133,20 @@ export function VoiceProvider({
     setError(null);
     setVoiceSessionActive(true);
     setLastResponse(null);
+
+    let micStream: MediaStream;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      setError(`Microphone access denied: ${e instanceof Error ? e.message : String(e)}`);
+      setVoiceSessionActive(false);
+      voiceSessionGuardRef.current = false;
+      return;
+    }
+
     const tokenResult = await getRealtimeToken();
     if (!tokenResult.token) {
+      micStream.getTracks().forEach((t) => t.stop());
       setError(tokenResult.error || "Could not get voice token.");
       setVoiceSessionActive(false);
       voiceSessionGuardRef.current = false;
@@ -146,6 +158,7 @@ export function VoiceProvider({
       m.startGrokRealtimeVoice({
         token,
         instructions,
+        stream: micStream,
         onError: (err) => {
           setError(err);
           setVoiceSessionActive(false);

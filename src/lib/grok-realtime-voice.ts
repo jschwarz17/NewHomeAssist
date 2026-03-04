@@ -46,6 +46,7 @@ function base64PCM16ToFloat32(base64: string): Float32Array {
 export interface GrokRealtimeOptions {
   token: string;
   instructions: string;
+  stream: MediaStream;
   onTranscript?: (text: string) => void;
   onError?: (err: string) => void;
 }
@@ -53,7 +54,7 @@ export interface GrokRealtimeOptions {
 export async function startGrokRealtimeVoice(
   options: GrokRealtimeOptions
 ): Promise<() => void> {
-  const { token, instructions, onTranscript, onError } = options;
+  const { token, instructions, stream, onTranscript, onError } = options;
   if (!token) {
     onError?.("No realtime token");
     return () => {};
@@ -64,7 +65,6 @@ export async function startGrokRealtimeVoice(
   const protocol = `xai-client-secret.${token}`;
   const ws = new WebSocket(WS_URL, [protocol]);
   let audioContext: AudioContext | null = null;
-  let stream: MediaStream | null = null;
   let sourceNode: MediaElementAudioSourceNode | MediaStreamAudioSourceNode | null = null;
   let processor: ScriptProcessorNode | null = null;
   let outputContext: AudioContext | null = null;
@@ -81,7 +81,7 @@ export async function startGrokRealtimeVoice(
     try {
       processor?.disconnect();
       sourceNode?.disconnect();
-      stream?.getTracks().forEach((t) => t.stop());
+      stream.getTracks().forEach((t) => t.stop());
       audioContext?.close();
       outputContext?.close();
     } catch {}
@@ -113,7 +113,6 @@ export async function startGrokRealtimeVoice(
     );
 
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioContext = new AudioContext();
       sourceNode = audioContext.createMediaStreamSource(stream);
       const bufferSize = 2048;
