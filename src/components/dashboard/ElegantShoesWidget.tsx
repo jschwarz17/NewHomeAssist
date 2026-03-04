@@ -10,7 +10,7 @@ function getWidgetsBase(): string {
   return (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "");
 }
 
-const FALLBACK_IMAGES = [
+const FALLBACK_IMAGES: Shoe[] = [
   { imageUrl: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=200&h=200&fit=crop", link: "https://unsplash.com/s/photos/elegant-women-shoes" },
   { imageUrl: "https://images.unsplash.com/photo-1535043934128-cf0b31cfbaa7?w=200&h=200&fit=crop", link: "https://unsplash.com/s/photos/elegant-women-shoes" },
   { imageUrl: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=200&h=200&fit=crop", link: "https://unsplash.com/s/photos/elegant-women-shoes" },
