@@ -338,7 +338,10 @@ export async function startGrokRealtimeVoice(
       const silentGain = audioContext.createGain();
       silentGain.gain.value = 0;
       silentGain.connect(audioContext.destination);
-      sourceNode.connect(processor);
+      const micBoost = audioContext.createGain();
+      micBoost.gain.value = 2.5;
+      sourceNode.connect(micBoost);
+      micBoost.connect(processor);
       processor.connect(silentGain);
 
       outputContext = new AudioContext({ sampleRate: SAMPLE_RATE });

@@ -150,7 +150,13 @@ export function VoiceProvider({
 
     let micStream: MediaStream;
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
     } catch (e) {
       setError(`Microphone access denied: ${e instanceof Error ? e.message : String(e)}`);
       setVoiceSessionActive(false);
