@@ -278,6 +278,7 @@ export function VoiceProvider({
     startListening,
     stopListening,
     endVoiceSession,
+    startVoiceSession: startGrokVoiceSession,
     sendToAssistant,
     getRealtimeToken,
   };

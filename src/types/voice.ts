@@ -21,6 +21,8 @@ export interface VoiceContextValue extends VoiceState {
   stopListening: () => void;
   /** End the current Grok Voice session and return to wake-word listening */
   endVoiceSession: () => void;
+  /** Manually start a Grok Voice session (bypasses wake word) */
+  startVoiceSession: () => void;
   sendToAssistant: (text: string) => Promise<void>;
   getRealtimeToken: () => Promise<string | null>;
 }
