@@ -359,7 +359,15 @@ export async function diagnoseSpeaker(ip: string): Promise<string[]> {
 async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
   try {
     const cached = localStorage.getItem(SPOTIFY_SVC_CACHE_KEY);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      const parsed: SpotifyServiceInfo = JSON.parse(cached);
+      const expectedRincon = parseInt(parsed.sid) * 256 + 7;
+      const expectedToken = `SA_RINCON${expectedRincon}_X_#Svc${expectedRincon}-0-Token`;
+      if (parsed.accountToken === expectedToken || parsed.accountToken.includes(`RINCON${expectedRincon}`)) {
+        return parsed;
+      }
+      localStorage.removeItem(SPOTIFY_SVC_CACHE_KEY);
+    }
   } catch { /* ignore */ }
 
   const info: SpotifyServiceInfo = { sid: "12", sn: "1", accountToken: "SA_RINCON3079_X_#Svc3079-0-Token" };

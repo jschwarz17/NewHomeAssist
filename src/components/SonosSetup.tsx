@@ -8,6 +8,8 @@ import {
   testConnection,
   clearSpotifyServiceCache,
   diagnoseSpeaker,
+  findSpeaker,
+  pause,
   type SonosSpeaker,
 } from "@/lib/sonos-client";
 import { isLoggedIn as isSpotifyLoggedIn, logout as spotifyLogout } from "@/lib/spotify-client";
@@ -68,8 +70,9 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
     try {
       const spkrs = getSpeakers();
       if (!spkrs.length) { addLog("No speakers configured"); setTesting(false); return; }
-      const sp = spkrs[0];
+      const sp = findSpeaker("Living Room") ?? spkrs[0];
       addLog(`Speaker: ${sp.name} (${sp.ip})`);
+      addLog(`All speakers: ${spkrs.map(s => s.name).join(", ")}`);
       addLog(`Spotify: ${isSpotifyLoggedIn() ? "yes" : "no"}`);
 
       addLog("Querying speaker services...");
@@ -140,14 +143,30 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
         {/* Test Playback — first so it's always visible */}
         {speakers.length > 0 && (
           <div className="mb-4 pb-3 border-b border-zinc-700">
-            <button
-              type="button"
-              disabled={testing}
-              onClick={runTest}
-              className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
-            >
-              {testing ? "Testing..." : "Test Playback"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={testing}
+                onClick={runTest}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
+              >
+                {testing ? "Testing..." : "Test Playback"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const msg = await pause();
+                    setTestLog((prev) => [...prev, `Stopped: ${msg}`]);
+                  } catch (e) {
+                    setTestLog((prev) => [...prev, `Stop err: ${e instanceof Error ? e.message : String(e)}`]);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-700 text-white hover:bg-red-600 transition-colors"
+              >
+                Stop
+              </button>
+            </div>
             {testLog.length > 0 && (
               <div className="mt-2 bg-zinc-800 rounded-lg p-2 max-h-56 overflow-y-auto">
                 {testLog.map((line, i) => (
