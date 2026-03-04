@@ -7,6 +7,7 @@ import {
   discoverFromDevice,
   testConnection,
   clearSpotifyServiceCache,
+  diagnoseSpeaker,
   type SonosSpeaker,
 } from "@/lib/sonos-client";
 import { isLoggedIn as isSpotifyLoggedIn, logout as spotifyLogout } from "@/lib/spotify-client";
@@ -70,6 +71,14 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
       const sp = spkrs[0];
       addLog(`Speaker: ${sp.name} (${sp.ip})`);
       addLog(`Spotify: ${isSpotifyLoggedIn() ? "yes" : "no"}`);
+
+      addLog("Querying speaker services...");
+      try {
+        const diagLines = await diagnoseSpeaker(sp.ip);
+        diagLines.forEach(l => addLog(l));
+      } catch (e) {
+        addLog(`diag err: ${e instanceof Error ? e.message : String(e)}`);
+      }
 
       if (isSpotifyLoggedIn()) {
         const spotify = await import("@/lib/spotify-client");

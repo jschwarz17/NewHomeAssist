@@ -214,6 +214,61 @@ export function clearSpotifyServiceCache(): void {
   try { localStorage.removeItem(SPOTIFY_SVC_CACHE_KEY); } catch { /* ignore */ }
 }
 
+export async function diagnoseSpeaker(ip: string): Promise<string[]> {
+  const lines: string[] = [];
+
+  try {
+    const svcXml = await soapRequest(
+      ip,
+      "/MusicServices/Control",
+      "urn:schemas-upnp-org:service:MusicServices:1",
+      "ListAvailableServices",
+      ""
+    );
+    const decoded = svcXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+
+    const serviceMatches = decoded.matchAll(/Id="(\d+)"[^>]*Name="([^"]+)"/gi);
+    for (const m of serviceMatches) {
+      const tag = m[2] === "Spotify" ? " <<<" : "";
+      lines.push(`svc: id=${m[1]} name=${m[2]}${tag}`);
+    }
+    if (!lines.length) {
+      const altMatches = decoded.matchAll(/<Service[^>]*>/gi);
+      for (const m of altMatches) {
+        lines.push(`raw svc: ${m[0].slice(0, 120)}`);
+      }
+    }
+    if (!lines.length) lines.push(`svcXml (200ch): ${decoded.slice(0, 200)}`);
+  } catch (e) {
+    lines.push(`ListSvc err: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  try {
+    const acctXml = await soapRequest(
+      ip,
+      "/SystemProperties/Control",
+      "urn:schemas-upnp-org:service:SystemProperties:1",
+      "GetString",
+      "<VariableName>R_AvailableServiceList</VariableName>"
+    );
+    const decoded = acctXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const acctMatches = decoded.matchAll(/ServiceId="(\d+)"[^>]*SerialNum="(\d+)"/gi);
+    for (const m of acctMatches) {
+      lines.push(`acct: sid=${m[1]} sn=${m[2]}`);
+    }
+    if (!lines.some(l => l.startsWith("acct:"))) {
+      lines.push(`acctXml (200ch): ${decoded.slice(0, 200)}`);
+    }
+  } catch (e) {
+    lines.push(`GetString err: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  const info = await getSpotifyServiceInfo(ip);
+  lines.push(`using: sid=${info.sid} sn=${info.sn} token=${info.accountToken}`);
+
+  return lines;
+}
+
 async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
   try {
     const cached = localStorage.getItem(SPOTIFY_SVC_CACHE_KEY);
