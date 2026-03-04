@@ -29,8 +29,10 @@ import ai.picovoice.eagle.EagleProfile;
  * Enrolls "jesse" and "vanessa" and identifies the current speaker during recognition.
  * See: https://picovoice.ai/docs/quick-start/eagle-android/
  */
-@CapacitorPlugin(name = "Eagle")
-@Permission(Manifest.permission.RECORD_AUDIO)
+@CapacitorPlugin(
+    name = "Eagle",
+    permissions = { @Permission(strings = { Manifest.permission.RECORD_AUDIO }) }
+)
 public class EaglePlugin extends Plugin {
 
     private static final String TAG = "EaglePlugin";

@@ -8,47 +8,33 @@ interface Quote {
   change?: string;
 }
 
+const PLACEHOLDER: Quote[] = [
+  { symbol: "CFG", price: "—" },
+  { symbol: "NASDAQ", price: "—" },
+  { symbol: "S&P 500", price: "—" },
+];
+
+function getWidgetsBase(): string {
+  if (typeof window === "undefined") return "";
+  return (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "");
+}
+
 export function StockPricesWidget() {
-  const [quotes, setQuotes] = useState<Quote[]>([
-    { symbol: "CFG", price: "—" },
-    { symbol: "NASDAQ", price: "—" },
-    { symbol: "S&P 500", price: "—" },
-  ]);
+  const [quotes, setQuotes] = useState<Quote[]>(PLACEHOLDER);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchStocks() {
-      try {
-        const key =
-          typeof process !== "undefined" && process.env?.NEXT_PUBLIC_ALPHA_VANTAGE_KEY
-            ? process.env.NEXT_PUBLIC_ALPHA_VANTAGE_KEY
-            : "";
-        if (key) {
-          const symbols = ["CFG", "IXIC", "SPX"];
-          const results: Quote[] = [];
-          for (const sym of symbols) {
-            const res = await fetch(
-              `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${sym}&apikey=${key}`
-            );
-            if (res.ok) {
-              const data = await res.json();
-              const q = data["Global Quote"];
-              if (q?.["05. price"]) {
-                const label = sym === "IXIC" ? "NASDAQ" : sym === "SPX" ? "S&P 500" : sym;
-                results.push({
-                  symbol: label,
-                  price: Number(q["05. price"]).toFixed(2),
-                  change: q["10. change percent"] ? `${q["10. change percent"]}%` : undefined,
-                });
-              }
-            }
-          }
-          if (results.length) setQuotes(results);
+    const base = getWidgetsBase();
+    const url = base ? `${base}/api/widgets/stocks` : "/api/widgets/stocks";
+    fetch(url)
+      .then((res) => res.ok ? res.json() : { quotes: [] })
+      .then((data) => {
+        if (Array.isArray(data.quotes) && data.quotes.length > 0) {
+          setQuotes(data.quotes);
         }
-      } catch {
-        // keep placeholders
-      }
-    }
-    fetchStocks();
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -56,6 +42,9 @@ export function StockPricesWidget() {
       <h3 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-3">
         Markets
       </h3>
+      {loading && quotes.every((q) => q.price === "—") ? (
+        <p className="text-sm text-zinc-500">Loading…</p>
+      ) : null}
       <ul className="space-y-2">
         {quotes.map((q) => (
           <li key={q.symbol} className="flex justify-between items-baseline text-sm">
@@ -64,6 +53,9 @@ export function StockPricesWidget() {
           </li>
         ))}
       </ul>
+      {!loading && quotes.every((q) => q.price === "—") && (
+        <p className="text-xs text-zinc-500 mt-2">Add ALPHA_VANTAGE_KEY on the server for live prices.</p>
+      )}
     </div>
   );
 }

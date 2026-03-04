@@ -34,7 +34,9 @@ export function EagleEnrollSection() {
   const onEnroll = useCallback(
     async (speakerId: SpeakerId) => {
       if (!accessKey) {
-        setMessage("Add NEXT_PUBLIC_PICOVOICE_API_KEY to your env.");
+        setMessage(
+          "Picovoice key isn’t in this build. For the Android app, add NEXT_PUBLIC_PICOVOICE_API_KEY to .env in this project, run npm run build:cap and npx cap sync android, then rebuild in Android Studio."
+        );
         return;
       }
       setLoading(speakerId);
@@ -103,7 +105,7 @@ export function EagleEnrollSection() {
         </div>
       </div>
       {message && (
-        <p className={`mt-2 text-sm ${message.startsWith("Add ") ? "text-amber-500" : "text-zinc-400"}`}>
+        <p className={`mt-2 text-sm ${message.startsWith("Picovoice key") ? "text-amber-500" : "text-zinc-400"}`}>
           {message}
         </p>
       )}
