@@ -53,6 +53,8 @@ export function VoiceProvider({
   const recognitionRef = useRef<{ abort?: () => void } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const stopVoiceSessionRef = useRef<(() => void) | null>(null);
+  /** Sync guard so wake word firing twice doesn't start two Grok Voice sessions */
+  const voiceSessionGuardRef = useRef(false);
 
   const startListening = useCallback(async () => {
     setError(null);
@@ -127,7 +129,8 @@ export function VoiceProvider({
   }, [picovoiceAccessKey]);
 
   async function startGrokVoiceSession() {
-    if (voiceSessionActive) return;
+    if (voiceSessionGuardRef.current) return;
+    voiceSessionGuardRef.current = true;
     setError(null);
     setVoiceSessionActive(true);
     setLastResponse(null);
@@ -135,6 +138,7 @@ export function VoiceProvider({
     if (!token) {
       setError("Could not get voice token. Check XAI_API_KEY on the server.");
       setVoiceSessionActive(false);
+      voiceSessionGuardRef.current = false;
       return;
     }
     const instructions = buildVoiceInstructions(speakerId);
@@ -146,17 +150,20 @@ export function VoiceProvider({
         onError: (err) => {
           setError(err);
           setVoiceSessionActive(false);
+          voiceSessionGuardRef.current = false;
         },
       })
     );
     stopVoiceSessionRef.current = () => {
       stop();
       setVoiceSessionActive(false);
+      voiceSessionGuardRef.current = false;
       setLastResponse(null);
     };
   }
 
   const stopListening = useCallback(async () => {
+    voiceSessionGuardRef.current = false;
     if (stopVoiceSessionRef.current) {
       stopVoiceSessionRef.current();
       stopVoiceSessionRef.current = null;
