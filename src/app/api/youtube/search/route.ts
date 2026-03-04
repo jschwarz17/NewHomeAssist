@@ -12,38 +12,12 @@ function json(data: object, status = 200) {
   return NextResponse.json(data, { status, headers: CORS_HEADERS });
 }
 
-const INVIDIOUS_INSTANCES = [
-  "https://vid.puffyan.us",
-  "https://invidious.fdn.fr",
-  "https://iv.ggtyler.dev",
-];
-
-async function searchInvidious(query: string): Promise<{ videoId: string; title: string } | null> {
-  for (const instance of INVIDIOUS_INSTANCES) {
-    try {
-      const res = await fetch(
-        `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`,
-        { signal: AbortSignal.timeout(5000) }
-      );
-      if (!res.ok) continue;
-      const results = await res.json();
-      const video = results?.[0];
-      if (video?.videoId) {
-        return { videoId: video.videoId, title: video.title ?? query };
-      }
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
 /**
  * POST /api/youtube/search
  * Body: { query: string }
  *
- * Returns a videoId for embedding. Tries YouTube Data API first (if key set),
- * then falls back to free Invidious API search.
+ * Returns a videoId for embedding.
+ * Uses YouTube Data API (needs YOUTUBE_API_KEY env var).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -71,16 +45,16 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch {
-        // fall through to Invidious
+        // fall through
       }
     }
 
-    const result = await searchInvidious(query);
-    if (result) {
-      return json({ success: true, videoId: result.videoId, title: result.title });
-    }
-
-    return json({ success: false, message: "No video found" });
+    return json({
+      success: false,
+      message: apiKey
+        ? "YouTube search returned no results"
+        : "YouTube API key not configured. Add YOUTUBE_API_KEY in Vercel env vars.",
+    });
   } catch (e) {
     return json({
       success: false,
