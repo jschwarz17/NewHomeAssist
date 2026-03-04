@@ -48,6 +48,7 @@ export function VoiceProvider({
   const [transcript, setTranscript] = useState("");
   const [lastResponse, setLastResponse] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wakeWordUnavailable, setWakeWordUnavailable] = useState(false);
 
   const porcupineRef = useRef<unknown>(null);
   const recognitionRef = useRef<{ abort?: () => void } | null>(null);
@@ -106,6 +107,7 @@ export function VoiceProvider({
               { processErrorCallback: (err) => setError(err?.message ?? "Porcupine error") }
             );
           } catch (e) {
+            setWakeWordUnavailable(true);
             setError(e instanceof Error ? e.message : "Failed to load wake word");
             return;
           }
@@ -122,6 +124,7 @@ export function VoiceProvider({
         console.log("[VoiceProvider] Eagle not started (enroll jesse/vanessa on Android):", eagleResult.error);
       }
     } catch (e) {
+      setWakeWordUnavailable(true);
       const msg = e instanceof Error ? e.message : "Failed to start wake word";
       setError(msg);
       console.error("[VoiceProvider] startListening", e);
@@ -271,6 +274,7 @@ export function VoiceProvider({
     isListening,
     wakeWordDetected,
     voiceSessionActive,
+    wakeWordUnavailable,
     speakerId,
     transcript,
     lastResponse,

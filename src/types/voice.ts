@@ -9,6 +9,8 @@ export interface VoiceState {
   wakeWordDetected: boolean;
   /** True when in a live Grok Voice conversation (after wake word) */
   voiceSessionActive: boolean;
+  /** True when Porcupine WASM can't run (e.g. Android WebView) */
+  wakeWordUnavailable: boolean;
   speakerId: SpeakerId;
   transcript: string;
   /** Last response from Ara (transcript of voice or text) */

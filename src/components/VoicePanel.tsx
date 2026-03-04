@@ -7,6 +7,7 @@ export function VoicePanel() {
     isListening,
     wakeWordDetected,
     voiceSessionActive,
+    wakeWordUnavailable,
     speakerId,
     error,
     startListening,
@@ -15,19 +16,17 @@ export function VoicePanel() {
     startVoiceSession,
   } = useVoice();
 
-  const porcupineFailed = !!error && !isListening && !voiceSessionActive;
-
   return (
     <div className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-6 space-y-4">
       <h3 className="text-sm font-medium text-zinc-300">Voice</h3>
       <p className="text-xs text-zinc-500">
-        {porcupineFailed
-          ? "Wake word unavailable on this device. Tap below to talk to Ara directly."
+        {wakeWordUnavailable
+          ? "Tap below to talk to Ara."
           : "Say \"Hey Ara\" to start a voice conversation with Ara. Tap End to return to wake-word listening."}
       </p>
 
       <div className="flex items-center gap-3 flex-wrap">
-        {!porcupineFailed && (
+        {!wakeWordUnavailable && !voiceSessionActive && (
           <button
             type="button"
             onClick={() => (isListening ? stopListening() : startListening())}
@@ -40,7 +39,7 @@ export function VoicePanel() {
             {isListening ? "Stop listening" : "Start listening"}
           </button>
         )}
-        {porcupineFailed && !voiceSessionActive && (
+        {wakeWordUnavailable && !voiceSessionActive && (
           <button
             type="button"
             onClick={startVoiceSession}
@@ -68,6 +67,10 @@ export function VoicePanel() {
           <span className="text-emerald-400 text-sm">Speaking with Ara</span>
         )}
       </div>
+
+      {error && !wakeWordUnavailable && (
+        <p className="text-red-400 text-sm">{error}</p>
+      )}
     </div>
   );
 }

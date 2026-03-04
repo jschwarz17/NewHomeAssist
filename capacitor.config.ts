@@ -3,10 +3,15 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const config: CapacitorConfig = {
   appId: "com.jesse.assistant",
   appName: "JesseHomeAssistant",
-  webDir: "out", // Points to the Next.js static export folder
+  webDir: "out",
   server: {
-    androidScheme: "https", // Allows Mic/WASM in WebView
-    cleartext: true, // Allows HTTP connection to laptop for Live Reload
+    androidScheme: "https",
+    cleartext: true,
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
   },
 };
 
