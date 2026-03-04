@@ -59,15 +59,18 @@ export async function startGrokRealtimeVoice(
     return () => {};
   }
 
+  const MIC_DELAY_MS = 600;
+
   const protocol = `xai-client-secret.${token}`;
   const ws = new WebSocket(WS_URL, [protocol]);
   let audioContext: AudioContext | null = null;
   let stream: MediaStream | null = null;
   let sourceNode: MediaElementAudioSourceNode | MediaStreamAudioSourceNode | null = null;
   let processor: ScriptProcessorNode | null = null;
-  let outputQueue: Float32Array[] = [];
   let outputContext: AudioContext | null = null;
   let closed = false;
+  let userHasSpoken = false;
+  let nextPlayTime = 0;
 
   const stop = () => {
     if (closed) return;
@@ -116,8 +119,10 @@ export async function startGrokRealtimeVoice(
       const bufferSize = 2048;
       processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
       const inputRate = audioContext.sampleRate;
+      const micStartTime = Date.now();
       processor.onaudioprocess = (e) => {
         if (closed || ws.readyState !== WebSocket.OPEN) return;
+        if (Date.now() - micStartTime < MIC_DELAY_MS) return;
         const input = e.inputBuffer.getChannelData(0);
         const resampled = resampleTo24000(input, inputRate);
         const base64 = float32ToPCM16Base64(resampled);
@@ -127,9 +132,10 @@ export async function startGrokRealtimeVoice(
       silentGain.gain.value = 0;
       silentGain.connect(audioContext.destination);
       sourceNode.connect(processor);
-      processor.connect(silentGain); // must connect to something for ScriptProcessor to run; no audible output
+      processor.connect(silentGain);
 
       outputContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+      nextPlayTime = outputContext.currentTime;
     } catch (e) {
       onError?.(e instanceof Error ? e.message : "Could not start microphone");
       stop();
@@ -140,6 +146,16 @@ export async function startGrokRealtimeVoice(
     try {
       const data = JSON.parse(event.data as string);
       switch (data.type) {
+        case "input_audio_buffer.speech_started":
+          userHasSpoken = true;
+          break;
+        case "response.created":
+          if (!userHasSpoken) {
+            ws.send(JSON.stringify({ type: "response.cancel" }));
+            break;
+          }
+          if (outputContext) nextPlayTime = outputContext.currentTime;
+          break;
         case "response.output_audio.delta":
           if (data.delta && outputContext && !closed) {
             const float32 = base64PCM16ToFloat32(data.delta);
@@ -148,7 +164,10 @@ export async function startGrokRealtimeVoice(
             const node = outputContext.createBufferSource();
             node.buffer = buffer;
             node.connect(outputContext.destination);
-            node.start();
+            const now = outputContext.currentTime;
+            const startAt = Math.max(now, nextPlayTime);
+            node.start(startAt);
+            nextPlayTime = startAt + buffer.duration;
           }
           break;
         case "response.output_audio_transcript.delta":
