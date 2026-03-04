@@ -146,7 +146,6 @@ export function VoiceProvider({
       m.startGrokRealtimeVoice({
         token,
         instructions,
-        onTranscript: (t) => setLastResponse((prev) => (prev ? prev + t : t)),
         onError: (err) => {
           setError(err);
           setVoiceSessionActive(false);

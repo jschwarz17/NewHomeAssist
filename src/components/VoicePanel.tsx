@@ -8,13 +8,10 @@ export function VoicePanel() {
     wakeWordDetected,
     voiceSessionActive,
     speakerId,
-    transcript,
-    lastResponse,
     error,
     startListening,
     stopListening,
     endVoiceSession,
-    sendToAssistant,
   } = useVoice();
 
   return (
@@ -55,23 +52,6 @@ export function VoicePanel() {
           <span className="text-emerald-400 text-sm">Speaking with Ara</span>
         )}
       </div>
-
-      {transcript && !voiceSessionActive && (
-        <div className="space-y-2">
-          <p className="text-zinc-400 text-sm">Transcript: {transcript}</p>
-          <button
-            type="button"
-            onClick={() => sendToAssistant(transcript)}
-            className="text-xs text-emerald-400 hover:text-emerald-300"
-          >
-            Send to assistant
-          </button>
-        </div>
-      )}
-
-      {lastResponse && (
-        <p className="text-sm text-zinc-300">Ara: {lastResponse}</p>
-      )}
 
       {error && (
         <p className="text-red-400 text-sm">{error}</p>
