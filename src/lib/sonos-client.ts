@@ -58,7 +58,9 @@ async function soapRequest(ip: string, path: string, serviceType: string, action
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Sonos ${action} failed (${res.status}): ${text.slice(0, 200)}`);
+    const codeMatch = text.match(/<errorCode>(\d+)<\/errorCode>/);
+    const code = codeMatch ? ` code=${codeMatch[1]}` : "";
+    throw new Error(`Sonos ${action} (${res.status}${code}): ${text.slice(0, 300)}`);
   }
   return res.text();
 }
@@ -265,6 +267,40 @@ export async function diagnoseSpeaker(ip: string): Promise<string[]> {
 
   const info = await getSpotifyServiceInfo(ip);
   lines.push(`using: sid=${info.sid} sn=${info.sn} token=${info.accountToken}`);
+
+  // Get current/last media to see native URI format
+  try {
+    const mediaXml = await soapRequest(
+      ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetMediaInfo",
+      "<InstanceID>0</InstanceID>"
+    );
+    const decoded = mediaXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const uriMatch = decoded.match(/<CurrentURI>([^<]*)<\/CurrentURI>/);
+    const metaMatch = decoded.match(/<CurrentURIMetaData>([^<]{0,500})/);
+    if (uriMatch) lines.push(`curURI: ${uriMatch[1]}`);
+    if (metaMatch && metaMatch[1]) lines.push(`curMeta: ${metaMatch[1].slice(0, 200)}`);
+    // Also look for desc/account token in metadata
+    const descMatch = decoded.match(/<desc[^>]*>([^<]*)<\/desc>/i);
+    if (descMatch) lines.push(`curToken: ${descMatch[1]}`);
+  } catch (e) {
+    lines.push(`MediaInfo err: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Also extract Spotify Type from ListAvailableServices for correct token
+  try {
+    const svcXml = await soapRequest(
+      ip,
+      "/MusicServices/Control",
+      "urn:schemas-upnp-org:service:MusicServices:1",
+      "ListAvailableServices",
+      ""
+    );
+    const decoded = svcXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    // Find Spotify service element and extract all attributes
+    const spotifyMatch = decoded.match(/<Service[^>]*Name="Spotify"[^>]*>/i)
+      ?? decoded.match(/<Service[^>]*Spotify[^>]*>/i);
+    if (spotifyMatch) lines.push(`spotifySvc: ${spotifyMatch[0].slice(0, 200)}`);
+  } catch { /* already shown above */ }
 
   return lines;
 }
