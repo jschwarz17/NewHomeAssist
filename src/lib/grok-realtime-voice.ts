@@ -127,6 +127,17 @@ const SET_VOLUME_TOOL = {
   },
 };
 
+const CLOSE_VIDEO_TOOL = {
+  type: "function",
+  name: "close_video",
+  description:
+    "Close the currently playing YouTube video and return to the main dashboard. " +
+    "Call this when the user says anything like 'go back', 'back to dashboard', 'close the video', " +
+    "'done', 'done watching', 'stop the video', 'exit', 'go home', 'dashboard', 'that's enough', " +
+    "'I'm done', or any phrase that indicates they want to stop watching and return to the dashboard.",
+  parameters: { type: "object", properties: {} },
+};
+
 const STORE_MEMORY_TOOL = {
   type: "function",
   name: "store_memory",
@@ -165,12 +176,13 @@ export interface GrokRealtimeOptions {
   onPauseMusic?: (device: string) => Promise<string>;
   onSetVolume?: (volume: number, device: string) => Promise<string>;
   onPlayYouTube?: (query: string) => Promise<string>;
+  onCloseVideo?: () => void;
 }
 
 export async function startGrokRealtimeVoice(
   options: GrokRealtimeOptions
 ): Promise<() => void> {
-  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored, onPlayMusic, onPauseMusic, onSetVolume, onPlayYouTube } = options;
+  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored, onPlayMusic, onPauseMusic, onSetVolume, onPlayYouTube, onCloseVideo } = options;
   if (!token) {
     onError?.("No realtime token");
     return () => {};
@@ -269,6 +281,12 @@ export async function startGrokRealtimeVoice(
         }
         return;
       }
+
+      if (name === "close_video") {
+        onCloseVideo?.();
+        respondToFunctionCall(callId, { success: true, message: "Returned to dashboard" });
+        return;
+      }
     } catch {}
 
     respondToFunctionCall(callId, { success: false, error: "Unknown function" });
@@ -291,7 +309,7 @@ export async function startGrokRealtimeVoice(
           voice: "Ara",
           instructions,
           turn_detection: { type: "server_vad" },
-          tools: [STORE_MEMORY_TOOL, PLAY_MUSIC_TOOL, PAUSE_MUSIC_TOOL, SET_VOLUME_TOOL, PLAY_YOUTUBE_TOOL],
+          tools: [STORE_MEMORY_TOOL, PLAY_MUSIC_TOOL, PAUSE_MUSIC_TOOL, SET_VOLUME_TOOL, PLAY_YOUTUBE_TOOL, CLOSE_VIDEO_TOOL],
           audio: {
             input: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },
             output: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },

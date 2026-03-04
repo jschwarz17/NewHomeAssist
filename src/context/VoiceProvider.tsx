@@ -24,6 +24,10 @@ interface VoiceProviderProps {
   picovoiceAccessKey?: string;
   /** Backend base URL for Ara/Grok + personalization (e.g. Vercel API) */
   apiBaseUrl?: string;
+  /** Callback to embed a YouTube video in the UI */
+  onPlayYouTubeEmbed?: (videoId: string, title?: string) => void;
+  /** Callback to close the YouTube video and return to dashboard */
+  onCloseVideo?: () => void;
 }
 
 const PORCUPINE_MODEL = { publicPath: "/porcupine_params.pv" };
@@ -37,7 +41,7 @@ function buildVoiceInstructions(speakerId: SpeakerId, memories: string[]): strin
 
   base += " You have a store_memory tool — use it aggressively. ANY time a user shares personal information (names, preferences, facts about their life, pet names, family details, allergies, routines, languages, important dates) or says anything like 'remember', 'don't forget', 'I want you to know', 'I want to teach you', 'learn this', or corrects you about a fact — call store_memory immediately. When in doubt, store it. After storing, briefly confirm what you remembered.";
   base += " You have play_music, pause_music, and set_volume tools for Sonos speakers. Default music: 'Latin indie' playlist on living room speakers. The user can request any music and any room (living room, guest bathroom, bedroom, kitchen, office). Use pause_music to stop, set_volume to adjust loudness.";
-  base += " You have a play_youtube tool to open YouTube videos. When the user wants to watch something, search YouTube and open it for them.";
+  base += " You have a play_youtube tool to show YouTube videos on screen. When the user wants to watch something, search YouTube and embed it for them. You also have a close_video tool — when the user says 'go back', 'dashboard', 'done', 'done watching', 'close', 'exit', 'that's enough', or anything indicating they're finished watching, call close_video to return them to the dashboard.";
 
   if (memories.length > 0) {
     base += "\n\nThings you remember from past conversations:\n" + memories.map((m) => `- ${m}`).join("\n");
@@ -49,6 +53,8 @@ export function VoiceProvider({
   children,
   picovoiceAccessKey,
   apiBaseUrl = "/api",
+  onPlayYouTubeEmbed,
+  onCloseVideo,
 }: VoiceProviderProps) {
   const [isListening, setIsListening] = useState(false);
   const [wakeWordDetected, setWakeWordDetected] = useState(false);
@@ -234,15 +240,17 @@ export function VoiceProvider({
               body: JSON.stringify({ query }),
             });
             const data = await res.json();
-            if (data.videoUrl) {
-              const { openLink } = await import("@/lib/open-link");
-              await openLink(data.videoUrl);
-              return `Opening YouTube: ${data.title ?? query}`;
+            if (data.videoId) {
+              onPlayYouTubeEmbed?.(data.videoId, data.title ?? query);
+              return `Now playing: ${data.title ?? query}`;
             }
             return "Could not find a video";
           } catch {
-            return "Could not reach YouTube";
+            return "Could not search YouTube";
           }
+        },
+        onCloseVideo: () => {
+          onCloseVideo?.();
         },
       })
     );

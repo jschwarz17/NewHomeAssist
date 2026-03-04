@@ -12,12 +12,38 @@ function json(data: object, status = 200) {
   return NextResponse.json(data, { status, headers: CORS_HEADERS });
 }
 
+const INVIDIOUS_INSTANCES = [
+  "https://vid.puffyan.us",
+  "https://invidious.fdn.fr",
+  "https://iv.ggtyler.dev",
+];
+
+async function searchInvidious(query: string): Promise<{ videoId: string; title: string } | null> {
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const res = await fetch(
+        `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (!res.ok) continue;
+      const results = await res.json();
+      const video = results?.[0];
+      if (video?.videoId) {
+        return { videoId: video.videoId, title: video.title ?? query };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 /**
  * POST /api/youtube/search
  * Body: { query: string }
  *
- * If YOUTUBE_API_KEY is set, uses YouTube Data API to find the best matching video.
- * Otherwise, returns a YouTube search URL that opens in the browser.
+ * Returns a videoId for embedding. Tries YouTube Data API first (if key set),
+ * then falls back to free Invidious API search.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -30,32 +56,31 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.YOUTUBE_API_KEY;
 
     if (apiKey) {
-      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=1&key=${apiKey}`;
-      const res = await fetch(searchUrl);
-      if (res.ok) {
-        const data = await res.json();
-        const video = data.items?.[0];
-        if (video) {
-          const videoId = video.id?.videoId;
-          const title = video.snippet?.title ?? query;
-          return json({
-            success: true,
-            videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
-            title,
-            videoId,
-          });
+      try {
+        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=1&key=${apiKey}`;
+        const res = await fetch(searchUrl);
+        if (res.ok) {
+          const data = await res.json();
+          const video = data.items?.[0];
+          if (video?.id?.videoId) {
+            return json({
+              success: true,
+              videoId: video.id.videoId,
+              title: video.snippet?.title ?? query,
+            });
+          }
         }
+      } catch {
+        // fall through to Invidious
       }
     }
 
-    // Fallback: return a YouTube search URL (works without API key)
-    const searchPageUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    return json({
-      success: true,
-      videoUrl: searchPageUrl,
-      title: query,
-      isSearch: true,
-    });
+    const result = await searchInvidious(query);
+    if (result) {
+      return json({ success: true, videoId: result.videoId, title: result.title });
+    }
+
+    return json({ success: false, message: "No video found" });
   } catch (e) {
     return json({
       success: false,
