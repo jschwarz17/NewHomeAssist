@@ -193,17 +193,30 @@ export function VoiceProvider({
           } catch {}
         },
         onPlayMusic: async (query, device) => {
+          const errors: string[] = [];
           try {
             const spotify = await import("@/lib/spotify-client");
             const sonos = await import("@/lib/sonos-client");
             if (spotify.isLoggedIn()) {
-              const result = await spotify.search(query, apiBaseUrl);
-              // Try Spotify Connect first, fall back to Sonos UPnP
+              let searchResult;
               try {
-                return await spotify.playOnDevice(result, device, apiBaseUrl);
-              } catch {
-                return await sonos.playSpotify(result.uri, result.name, device);
+                searchResult = await spotify.search(query, apiBaseUrl);
+              } catch (e) {
+                return `Spotify search failed: ${e instanceof Error ? e.message : String(e)}`;
               }
+              // Try Spotify Connect
+              try {
+                return await spotify.playOnDevice(searchResult, device, apiBaseUrl);
+              } catch (e) {
+                errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
+              }
+              // Fall back to Sonos UPnP
+              try {
+                return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+              } catch (e) {
+                errors.push(`Sonos: ${e instanceof Error ? e.message : String(e)}`);
+              }
+              return `Could not play "${searchResult.name}". ${errors.join(". ")}`;
             }
             const sonosResult = await sonos.play(device);
             return `${sonosResult} — "${query}" (connect Spotify for full control)`;

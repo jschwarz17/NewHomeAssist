@@ -210,27 +210,33 @@ interface SpotifyServiceInfo {
 
 const SPOTIFY_SVC_CACHE_KEY = "sonos_spotify_svc";
 
+export function clearSpotifyServiceCache(): void {
+  try { localStorage.removeItem(SPOTIFY_SVC_CACHE_KEY); } catch { /* ignore */ }
+}
+
 async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
   try {
     const cached = localStorage.getItem(SPOTIFY_SVC_CACHE_KEY);
     if (cached) return JSON.parse(cached);
   } catch { /* ignore */ }
 
-  const svcXml = await soapRequest(
-    ip,
-    "/MusicServices/Control",
-    "urn:schemas-upnp-org:service:MusicServices:1",
-    "ListAvailableServices",
-    ""
-  );
+  const defaults: SpotifyServiceInfo = { sid: "9", sn: "1", accountToken: "SA_RINCON2311_X_#Svc2311-0-Token" };
 
-  let sid = "9";
-  const sidMatch = svcXml.match(/Id&gt;(\d+)&lt;.*?Name&gt;Spotify/i)
-    ?? svcXml.match(/Id>(\d+)<.*?Name>Spotify/i)
-    ?? svcXml.match(/"(\d+)"[^>]*Spotify/i);
-  if (sidMatch) sid = sidMatch[1];
+  try {
+    const svcXml = await soapRequest(
+      ip,
+      "/MusicServices/Control",
+      "urn:schemas-upnp-org:service:MusicServices:1",
+      "ListAvailableServices",
+      ""
+    );
 
-  let sn = "1";
+    const decoded = svcXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const sidMatch = decoded.match(/Id>(\d+)<[^]*?Name>Spotify/i)
+      ?? decoded.match(/Id="(\d+)"[^>]*Name="Spotify"/i);
+    if (sidMatch) defaults.sid = sidMatch[1];
+  } catch { /* use defaults */ }
+
   try {
     const acctXml = await soapRequest(
       ip,
@@ -239,87 +245,97 @@ async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
       "GetString",
       "<VariableName>R_AvailableServiceList</VariableName>"
     );
-    const snMatch = acctXml.match(new RegExp(`ServiceId="${sid}"[^>]*SerialNum="(\\d+)"`, "i"))
-      ?? acctXml.match(new RegExp(`SerialNum="(\\d+)"[^>]*ServiceId="${sid}"`, "i"));
-    if (snMatch) sn = snMatch[1];
-  } catch { /* use default */ }
+    const decoded = acctXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const snMatch = decoded.match(new RegExp(`ServiceId="${defaults.sid}"[^>]*SerialNum="(\\d+)"`, "i"))
+      ?? decoded.match(new RegExp(`SerialNum="(\\d+)"[^>]*ServiceId="${defaults.sid}"`, "i"));
+    if (snMatch) defaults.sn = snMatch[1];
+  } catch { /* use defaults */ }
 
-  const typeId = "2311";
-  const info: SpotifyServiceInfo = {
-    sid,
-    sn,
-    accountToken: `SA_RINCON${typeId}_X_#Svc${typeId}-0-Token`,
-  };
-
-  try { localStorage.setItem(SPOTIFY_SVC_CACHE_KEY, JSON.stringify(info)); } catch { /* ignore */ }
-  return info;
+  try { localStorage.setItem(SPOTIFY_SVC_CACHE_KEY, JSON.stringify(defaults)); } catch { /* ignore */ }
+  return defaults;
 }
 
 /**
  * Play a Spotify URI on a Sonos speaker.
- * Queries the speaker for its Spotify service config to build correct URIs.
+ * Tries multiple URI formats for compatibility across Sonos firmware versions.
  */
 export async function playSpotify(spotifyUri: string, title: string, roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
 
+  // For artist URIs, convert to artist radio which Sonos handles better
+  let uri = spotifyUri;
+  if (uri.startsWith("spotify:artist:")) {
+    uri = uri.replace("spotify:artist:", "spotify:artistRadio:");
+  }
+
   const svc = await getSpotifyServiceInfo(speaker.ip);
-  const sonosUri = spotifyUriToSonos(spotifyUri, svc);
-  const metadata = buildSpotifyMetadata(spotifyUri, title, svc);
+  const errors: string[] = [];
 
-  await soapRequest(
-    speaker.ip,
-    AV_TRANSPORT_PATH,
-    AV_TRANSPORT,
-    "SetAVTransportURI",
-    `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>`
-  );
-  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
-  return `Playing "${title}" on ${speaker.name}`;
-}
+  // Attempt 1: SetAVTransportURI with URL-encoded Spotify URI
+  try {
+    const encodedUri = uri.replace(/:/g, "%3a");
+    const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
+    const metadata = buildSpotifyMetadata(uri, title, svc);
+    await soapRequest(
+      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+      `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>`
+    );
+    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    return `Playing "${title}" on ${speaker.name}`;
+  } catch (e) {
+    errors.push(`attempt1: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
-function spotifyUriToSonos(uri: string, svc: SpotifyServiceInfo): string {
-  const parts = uri.split(":");
-  const type = parts[1];
+  // Attempt 2: SetAVTransportURI with non-encoded URI
+  try {
+    const sonosUri = `x-sonos-spotify:${uri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
+    const metadata = buildSpotifyMetadata(uri, title, svc);
+    await soapRequest(
+      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+      `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>`
+    );
+    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    return `Playing "${title}" on ${speaker.name}`;
+  } catch (e) {
+    errors.push(`attempt2: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
-  if (type === "track") {
-    return `x-sonos-spotify:${uri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
+  // Attempt 3: AddURIToQueue then play
+  try {
+    const encodedUri = uri.replace(/:/g, "%3a");
+    const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
+    const metadata = buildSpotifyMetadata(uri, title, svc);
+
+    await soapRequest(
+      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "RemoveAllTracksFromQueue",
+      "<InstanceID>0</InstanceID>"
+    );
+    await soapRequest(
+      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "AddURIToQueue",
+      `<InstanceID>0</InstanceID><EnqueuedURI>${escapeXml(sonosUri)}</EnqueuedURI><EnqueuedURIMetaData>${escapeXml(metadata)}</EnqueuedURIMetaData><DesiredFirstTrackNumberEnqueued>0</DesiredFirstTrackNumberEnqueued><EnqueueAsNext>1</EnqueueAsNext>`
+    );
+    await soapRequest(
+      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+      `<InstanceID>0</InstanceID><CurrentURI>x-rincon-queue:${escapeXml(speaker.ip)}#0</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
+    );
+    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    return `Playing "${title}" on ${speaker.name}`;
+  } catch (e) {
+    errors.push(`attempt3: ${e instanceof Error ? e.message : String(e)}`);
   }
-  if (type === "playlist") {
-    return `x-rincon-cpcontainer:1006206c${uri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
-  }
-  if (type === "album") {
-    return `x-rincon-cpcontainer:1004206c${uri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
-  }
-  if (type === "artist") {
-    return `x-rincon-cpcontainer:10052064${uri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
-  }
-  return `x-sonos-spotify:${uri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
+
+  throw new Error(`All playback attempts failed. ${errors.join(" | ")}`);
 }
 
 function buildSpotifyMetadata(uri: string, title: string, svc: SpotifyServiceInfo): string {
-  const parts = uri.split(":");
-  const type = parts[1];
-
-  let itemClass = "object.item.audioItem.musicTrack";
-
-  if (type === "track") {
-    itemClass = "object.item.audioItem.musicTrack";
-  } else if (type === "playlist") {
-    itemClass = "object.container.playlistContainer";
-  } else if (type === "album") {
-    itemClass = "object.container.album.musicAlbum";
-  } else if (type === "artist") {
-    itemClass = "object.container.person.musicArtist";
-  }
-
   const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   return (
     `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
     `<item id="00032020${uri}" parentID="0" restricted="true">` +
     `<dc:title>${safeTitle}</dc:title>` +
-    `<upnp:class>${itemClass}</upnp:class>` +
+    `<upnp:class>object.item.audioItem.musicTrack</upnp:class>` +
     `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">${svc.accountToken}</desc>` +
     `</item></DIDL-Lite>`
   );
