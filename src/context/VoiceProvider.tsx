@@ -195,9 +195,14 @@ export function VoiceProvider({
         },
         onPlayMusic: async (query, device) => {
           try {
+            const spotify = await import("@/lib/spotify-client");
             const sonos = await import("@/lib/sonos-client");
+            if (spotify.isLoggedIn()) {
+              const result = await spotify.search(query, apiBaseUrl);
+              return await sonos.playSpotify(result.uri, result.name, device);
+            }
             const result = await sonos.play(device);
-            return `${result} — "${query}"`;
+            return `${result} — "${query}" (connect Spotify for full control)`;
           } catch (e) {
             return e instanceof Error ? e.message : "Could not play music";
           }

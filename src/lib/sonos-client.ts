@@ -149,6 +149,79 @@ export async function testConnection(ip: string): Promise<boolean> {
   }
 }
 
+/**
+ * Play a Spotify URI on a Sonos speaker.
+ * Converts spotify:track:xxx / spotify:playlist:xxx / spotify:album:xxx
+ * into Sonos-compatible AVTransport URIs.
+ */
+export async function playSpotify(spotifyUri: string, title: string, roomName?: string): Promise<string> {
+  const speaker = findSpeaker(roomName);
+  if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
+
+  const sonosUri = spotifyUriToSonos(spotifyUri);
+  const metadata = buildSpotifyMetadata(spotifyUri, title);
+
+  await soapRequest(
+    speaker.ip,
+    AV_TRANSPORT_PATH,
+    AV_TRANSPORT,
+    "SetAVTransportURI",
+    `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>`
+  );
+  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  return `Playing "${title}" on ${speaker.name}`;
+}
+
+function spotifyUriToSonos(uri: string): string {
+  // spotify:track:6rqhFgbbKwnb9MLmUQDhG6 → x-sonos-spotify:spotify:track:6rqhFgbbKwnb9MLmUQDhG6
+  // spotify:playlist:37i9dQZF1DX5IDTimEWoTd → x-rincon-cpcontainer:1006206cspotify:playlist:37i9dQZF1DX5IDTimEWoTd
+  // spotify:album:xxx → x-rincon-cpcontainer:1004206cspotify:album:xxx
+  const parts = uri.split(":");
+  const type = parts[1];
+
+  if (type === "track") {
+    return `x-sonos-spotify:${uri}?sid=12&flags=8224&sn=5`;
+  }
+  if (type === "playlist") {
+    return `x-rincon-cpcontainer:1006206c${uri}`;
+  }
+  if (type === "album") {
+    return `x-rincon-cpcontainer:1004206c${uri}`;
+  }
+  return `x-sonos-spotify:${uri}?sid=12&flags=8224&sn=5`;
+}
+
+function buildSpotifyMetadata(uri: string, title: string): string {
+  const parts = uri.split(":");
+  const type = parts[1];
+  const id = parts[2];
+
+  let itemClass = "object.item.audioItem.musicTrack";
+  let parentId = "";
+
+  if (type === "track") {
+    itemClass = "object.item.audioItem.musicTrack";
+    parentId = `1004206c${uri}`;
+  } else if (type === "playlist") {
+    itemClass = "object.container.playlistContainer";
+    parentId = `10062a6c${uri}`;
+  } else if (type === "album") {
+    itemClass = "object.container.album.musicAlbum";
+    parentId = `1004206c${uri}`;
+  }
+
+  const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  return (
+    `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
+    `<item id="00032020${uri}" parentID="${parentId}" restricted="true">` +
+    `<dc:title>${safeTitle}</dc:title>` +
+    `<upnp:class>${itemClass}</upnp:class>` +
+    `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON2311_X_#Svc2311-0-Token</desc>` +
+    `</item></DIDL-Lite>`
+  );
+}
+
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

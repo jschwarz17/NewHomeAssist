@@ -8,15 +8,18 @@ import {
   testConnection,
   type SonosSpeaker,
 } from "@/lib/sonos-client";
+import { isLoggedIn as isSpotifyLoggedIn, logout as spotifyLogout } from "@/lib/spotify-client";
 
 export function SonosSetup({ onClose }: { onClose: () => void }) {
   const [speakers, setSpeakers] = useState<SonosSpeaker[]>([]);
   const [seedIp, setSeedIp] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [discovering, setDiscovering] = useState(false);
+  const [spotifyConnected, setSpotifyConnected] = useState(false);
 
   useEffect(() => {
     setSpeakers(getSpeakers());
+    setSpotifyConnected(isSpotifyLoggedIn());
   }, []);
 
   const handleDiscover = useCallback(async () => {
@@ -130,6 +133,37 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
             No speakers configured yet
           </p>
         )}
+
+        {/* Spotify connection */}
+        <div className="mt-5 pt-4 border-t border-zinc-700">
+          <h3 className="text-xs text-zinc-400 font-medium uppercase tracking-wide mb-2">
+            Spotify
+          </h3>
+          {spotifyConnected ? (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-green-400">Connected</span>
+              <button
+                type="button"
+                onClick={() => { spotifyLogout(); setSpotifyConnected(false); }}
+                className="text-xs text-zinc-500 hover:text-red-400"
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs text-zinc-500 mb-2">
+                Connect Spotify so Ara can play any song, artist, or playlist by voice.
+              </p>
+              <a
+                href={`${process.env.NEXT_PUBLIC_ASSISTANT_API_URL?.replace(/\/+$/, "") || ""}/api/spotify/auth/`}
+                className="inline-block px-4 py-2 rounded-lg text-sm font-medium bg-[#1DB954] text-black hover:bg-[#1ed760] transition-colors"
+              >
+                Connect Spotify
+              </a>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
