@@ -71,17 +71,61 @@ const AV_TRANSPORT_PATH = "/MediaRenderer/AVTransport/Control";
 const RENDERING_CONTROL = "urn:schemas-upnp-org:service:RenderingControl:1";
 const RENDERING_CONTROL_PATH = "/MediaRenderer/RenderingControl/Control";
 
+/**
+ * Resolve the group coordinator IP for a speaker.
+ * If the speaker is a slave in a Sonos group (curURI = x-rincon:RINCON_xxx),
+ * transport commands must go to the coordinator, not the slave.
+ */
+async function resolveCoordinator(speakerIp: string): Promise<string> {
+  try {
+    const mediaXml = await soapRequest(
+      speakerIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetMediaInfo",
+      "<InstanceID>0</InstanceID>"
+    );
+    const decoded = mediaXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const currentUri = decoded.match(/<CurrentURI>([^<]*)<\/CurrentURI>/)?.[1] ?? "";
+
+    if (!currentUri.startsWith("x-rincon:")) return speakerIp;
+
+    const coordUuid = currentUri.replace("x-rincon:", "");
+    const speakers = getSpeakers();
+    const match = speakers.find(s => s.uuid === coordUuid);
+    if (match) return match.ip;
+
+    const topoXml = await soapRequest(
+      speakerIp,
+      "/ZoneGroupTopology/Control",
+      "urn:schemas-upnp-org:service:ZoneGroupTopology:1",
+      "GetZoneGroupState",
+      ""
+    );
+    const topoDec = topoXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const re = /<ZoneGroupMember\s[^>]*?>/gi;
+    let m;
+    while ((m = re.exec(topoDec)) !== null) {
+      const tag = m[0];
+      if (tag.includes(`UUID="${coordUuid}"`)) {
+        const ipMatch = tag.match(/Location="http:\/\/([^:]+):\d+/i);
+        if (ipMatch) return ipMatch[1];
+      }
+    }
+  } catch { /* fall through */ }
+  return speakerIp;
+}
+
 export async function play(roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
-  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  const targetIp = await resolveCoordinator(speaker.ip);
+  await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
   return `Playing on ${speaker.name}`;
 }
 
 export async function pause(roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured.");
-  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Pause", "<InstanceID>0</InstanceID>");
+  const targetIp = await resolveCoordinator(speaker.ip);
+  await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Pause", "<InstanceID>0</InstanceID>");
   return `Paused ${speaker.name}`;
 }
 
@@ -102,14 +146,15 @@ export async function setVolume(volume: number, roomName?: string): Promise<stri
 export async function setAVTransportURI(uri: string, roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured.");
+  const targetIp = await resolveCoordinator(speaker.ip);
   await soapRequest(
-    speaker.ip,
+    targetIp,
     AV_TRANSPORT_PATH,
     AV_TRANSPORT,
     "SetAVTransportURI",
     `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(uri)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
   );
-  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
   return `Playing on ${speaker.name}`;
 }
 
@@ -283,8 +328,22 @@ export async function diagnoseSpeaker(ip: string): Promise<string[]> {
     lines.push(`GetString err: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // Group coordinator detection
+  try {
+    const coordIp = await resolveCoordinator(ip);
+    if (coordIp !== ip) {
+      const coordSpeaker = getSpeakers().find(s => s.ip === coordIp);
+      lines.push(`grouped: YES → coordinator ${coordSpeaker?.name ?? "unknown"} (${coordIp})`);
+    } else {
+      lines.push(`grouped: no (this speaker is coordinator)`);
+    }
+  } catch {
+    lines.push(`grouped: unknown`);
+  }
+
   clearSpotifyServiceCache();
-  const info = await getSpotifyServiceInfo(ip);
+  const coordIpForInfo = await resolveCoordinator(ip).catch(() => ip);
+  const info = await getSpotifyServiceInfo(coordIpForInfo);
   lines.push(`using: sid=${info.sid} sn=${info.sn} token=${info.accountToken}`);
 
   // Get current track info (not queue URI but actual track)
@@ -405,6 +464,20 @@ async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
     if (snMatch) info.sn = snMatch[1];
   } catch { /* use defaults */ }
 
+  // Fallback: extract sn from existing Spotify queue items
+  if (info.sn === "1") {
+    try {
+      const qXml = await soapRequest(
+        ip, "/MediaServer/ContentDirectory/Control",
+        "urn:schemas-upnp-org:service:ContentDirectory:1", "Browse",
+        `<ObjectID>Q:0</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>0</StartingIndex><RequestedCount>1</RequestedCount><SortCriteria></SortCriteria>`
+      );
+      const qDecoded = qXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+      const qSnMatch = qDecoded.match(/sn=(\d+)/);
+      if (qSnMatch) info.sn = qSnMatch[1];
+    } catch { /* not critical */ }
+  }
+
   // Try to extract the real account token from a currently-playing Spotify track
   try {
     const posXml = await soapRequest(
@@ -442,79 +515,58 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
     uri = uri.replace("spotify:artist:", "spotify:artistRadio:");
   }
 
-  const svc = await getSpotifyServiceInfo(speaker.ip);
+  const targetIp = await resolveCoordinator(speaker.ip);
+  const svc = await getSpotifyServiceInfo(targetIp);
   const encodedUri = uri.replace(/:/g, "%3a");
+  const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8232&sn=${svc.sn}`;
+  const metadata = buildSpotifyMetadata(uri, title, svc);
   const errors: string[] = [];
 
   // #region agent log
-  console.log(`[sonos-debug] playSpotify: uri=${uri} sid=${svc.sid} sn=${svc.sn} token=${svc.accountToken}`);
+  console.log(`[sonos-debug] playSpotify: target=${targetIp} (speaker=${speaker.ip}) uri=${uri} sid=${svc.sid} sn=${svc.sn} token=${svc.accountToken}`);
   // #endregion
 
-  // Attempt 1: SetAVTransportURI with encoded URI + typed metadata
+  // Attempt 1: SetAVTransportURI with metadata
   try {
-    const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
-    const metadata = buildSpotifyMetadata(uri, title, svc);
     await soapRequest(
-      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+      targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
       `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>`
     );
-    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
     return `Playing "${title}" on ${speaker.name}`;
   } catch (e) {
     errors.push(`attempt1: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Attempt 2: SetAVTransportURI with empty metadata (let Sonos resolve it)
+  // Attempt 2: SetAVTransportURI without metadata
   try {
-    const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
     await soapRequest(
-      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+      targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
       `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
     );
-    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
     return `Playing "${title}" on ${speaker.name}`;
   } catch (e) {
     errors.push(`attempt2: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Attempt 3: Non-encoded URI with typed metadata
+  // Attempt 3: AddURIToQueue then play from queue
   try {
-    const sonosUri = `x-sonos-spotify:${uri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
-    const metadata = buildSpotifyMetadata(uri, title, svc);
+    const uuid = speaker.uuid ?? await getSpeakerUuid(targetIp);
     await soapRequest(
-      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
-      `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>`
-    );
-    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
-    return `Playing "${title}" on ${speaker.name}`;
-  } catch (e) {
-    errors.push(`attempt3: ${e instanceof Error ? e.message : String(e)}`);
-  }
-
-  // Attempt 4: AddURIToQueue then play from queue (needs speaker UUID)
-  try {
-    const uuid = speaker.uuid ?? await getSpeakerUuid(speaker.ip);
-    const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8224&sn=${svc.sn}`;
-    const metadata = buildSpotifyMetadata(uri, title, svc);
-
-    await soapRequest(
-      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "RemoveAllTracksFromQueue",
-      "<InstanceID>0</InstanceID>"
-    );
-    await soapRequest(
-      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "AddURIToQueue",
+      targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "AddURIToQueue",
       `<InstanceID>0</InstanceID><EnqueuedURI>${escapeXml(sonosUri)}</EnqueuedURI><EnqueuedURIMetaData>${escapeXml(metadata)}</EnqueuedURIMetaData><DesiredFirstTrackNumberEnqueued>0</DesiredFirstTrackNumberEnqueued><EnqueueAsNext>1</EnqueueAsNext>`
     );
     if (uuid) {
       await soapRequest(
-        speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+        targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
         `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(`x-rincon-queue:${uuid}#0`)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
       );
     }
-    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
     return `Playing "${title}" on ${speaker.name}`;
   } catch (e) {
-    errors.push(`attempt4: ${e instanceof Error ? e.message : String(e)}`);
+    errors.push(`attempt3: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   throw new Error(`All playback attempts failed. ${errors.join(" | ")}`);
