@@ -156,7 +156,7 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
                 type="button"
                 onClick={async () => {
                   try {
-                    const msg = await pause();
+                    const msg = await pause("Living Room");
                     setTestLog((prev) => [...prev, `Stopped: ${msg}`]);
                   } catch (e) {
                     setTestLog((prev) => [...prev, `Stop err: ${e instanceof Error ? e.message : String(e)}`]);

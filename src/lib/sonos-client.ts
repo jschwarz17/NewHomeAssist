@@ -422,7 +422,8 @@ async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
       const parsed: SpotifyServiceInfo = JSON.parse(cached);
       const expectedRincon = parseInt(parsed.sid) * 256 + 7;
       const expectedToken = `SA_RINCON${expectedRincon}_X_#Svc${expectedRincon}-0-Token`;
-      if (parsed.accountToken === expectedToken || parsed.accountToken.includes(`RINCON${expectedRincon}`)) {
+      const tokenOk = parsed.accountToken === expectedToken || parsed.accountToken.includes(`RINCON${expectedRincon}`);
+      if (tokenOk && parsed.sn !== "1") {
         return parsed;
       }
       localStorage.removeItem(SPOTIFY_SVC_CACHE_KEY);
@@ -510,21 +511,43 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
 
-  let uri = spotifyUri;
-  if (uri.startsWith("spotify:artist:")) {
-    uri = uri.replace("spotify:artist:", "spotify:artistRadio:");
-  }
-
   const targetIp = await resolveCoordinator(speaker.ip);
   const svc = await getSpotifyServiceInfo(targetIp);
+
+  // #region agent log
+  console.log(`[sonos-debug] playSpotify: target=${targetIp} (speaker=${speaker.ip}) uri=${spotifyUri} sid=${svc.sid} sn=${svc.sn} token=${svc.accountToken}`);
+  // #endregion
+
+  // Artist URIs need x-sonosapi-radio format (not x-sonos-spotify)
+  if (spotifyUri.startsWith("spotify:artist:")) {
+    const encodedUri = spotifyUri.replace(/:/g, "%3a");
+    const radioUri = `x-sonosapi-radio:${encodedUri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
+    const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const radioMeta =
+      `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
+      `<item id="100c206c${encodedUri}" parentID="0" restricted="true">` +
+      `<dc:title>${safeTitle} Radio</dc:title>` +
+      `<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>` +
+      `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">${svc.accountToken}</desc>` +
+      `</item></DIDL-Lite>`;
+    try {
+      await soapRequest(
+        targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+        `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(radioUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(radioMeta)}</CurrentURIMetaData>`
+      );
+      await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+      return `Playing "${title}" radio on ${speaker.name}`;
+    } catch (e) {
+      // Fall through to track-based attempts
+      console.log(`[sonos-debug] artist radio failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  const uri = spotifyUri;
   const encodedUri = uri.replace(/:/g, "%3a");
   const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8232&sn=${svc.sn}`;
   const metadata = buildSpotifyMetadata(uri, title, svc);
   const errors: string[] = [];
-
-  // #region agent log
-  console.log(`[sonos-debug] playSpotify: target=${targetIp} (speaker=${speaker.ip}) uri=${uri} sid=${svc.sid} sn=${svc.sn} token=${svc.accountToken}`);
-  // #endregion
 
   // Attempt 1: SetAVTransportURI with metadata
   try {
