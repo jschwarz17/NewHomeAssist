@@ -200,6 +200,9 @@ export function VoiceProvider({
         },
         onPlayMusic: async (query, device) => {
           const errors: string[] = [];
+          // #region agent log
+          fetch('http://127.0.0.1:7941/ingest/a776faa3-83f9-4447-bc71-2e69749c8ab8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c4e6f'},body:JSON.stringify({sessionId:'9c4e6f',location:'VoiceProvider.tsx:onPlayMusic',message:'play_music called',data:{query,device},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+          // #endregion
           try {
             const spotify = await import("@/lib/spotify-client");
             const sonos = await import("@/lib/sonos-client");
@@ -207,13 +210,26 @@ export function VoiceProvider({
               let searchResult;
               try {
                 searchResult = await spotify.search(query, apiBaseUrl);
+                // #region agent log
+                fetch('http://127.0.0.1:7941/ingest/a776faa3-83f9-4447-bc71-2e69749c8ab8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c4e6f'},body:JSON.stringify({sessionId:'9c4e6f',location:'VoiceProvider.tsx:search-result',message:'search returned',data:{uri:searchResult.uri,name:searchResult.name,type:searchResult.type,query},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+                // #endregion
               } catch (e) {
+                // #region agent log
+                fetch('http://127.0.0.1:7941/ingest/a776faa3-83f9-4447-bc71-2e69749c8ab8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c4e6f'},body:JSON.stringify({sessionId:'9c4e6f',location:'VoiceProvider.tsx:search-error',message:'search failed',data:{error:e instanceof Error?e.message:String(e),query},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+                // #endregion
                 return `Spotify search failed: ${e instanceof Error ? e.message : String(e)}`;
               }
               // Try Sonos UPnP first (direct, fast, uses correct service ID)
               try {
-                return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                const upnpResult = await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                // #region agent log
+                fetch('http://127.0.0.1:7941/ingest/a776faa3-83f9-4447-bc71-2e69749c8ab8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c4e6f'},body:JSON.stringify({sessionId:'9c4e6f',location:'VoiceProvider.tsx:upnp-ok',message:'UPnP playback succeeded',data:{result:upnpResult,uri:searchResult.uri},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+                // #endregion
+                return upnpResult;
               } catch (e) {
+                // #region agent log
+                fetch('http://127.0.0.1:7941/ingest/a776faa3-83f9-4447-bc71-2e69749c8ab8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c4e6f'},body:JSON.stringify({sessionId:'9c4e6f',location:'VoiceProvider.tsx:upnp-error',message:'UPnP playback failed',data:{error:e instanceof Error?e.message:String(e),uri:searchResult.uri},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+                // #endregion
                 errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
               }
               // Fall back to Spotify Connect (wakes speaker, polls for it)
@@ -222,6 +238,9 @@ export function VoiceProvider({
               } catch (e) {
                 errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
               }
+              // #region agent log
+              fetch('http://127.0.0.1:7941/ingest/a776faa3-83f9-4447-bc71-2e69749c8ab8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c4e6f'},body:JSON.stringify({sessionId:'9c4e6f',location:'VoiceProvider.tsx:all-failed',message:'all playback methods failed',data:{errors,query,uri:searchResult.uri},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+              // #endregion
               return `Could not play "${searchResult.name}". ${errors.join(". ")}`;
             }
             const sonosResult = await sonos.play(device);
