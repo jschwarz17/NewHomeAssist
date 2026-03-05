@@ -107,6 +107,13 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
   }
 
   if (artist && lowerQuery.includes(artist.name.toLowerCase())) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const artistTrack = data.tracks?.items?.find((t: any) =>
+      t.artists?.some((a: any) => a.id === artist.id)
+    );
+    if (artistTrack) {
+      return { uri: artistTrack.uri, name: artistTrack.name, artist: artist.name, type: "track" };
+    }
     return { uri: artist.uri, name: artist.name, type: "artist" as "track" };
   }
 
@@ -115,6 +122,13 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
   }
 
   if (artist) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const artistTrack = data.tracks?.items?.find((t: any) =>
+      t.artists?.some((a: any) => a.id === artist.id)
+    );
+    if (artistTrack) {
+      return { uri: artistTrack.uri, name: artistTrack.name, artist: artist.name, type: "track" };
+    }
     return { uri: artist.uri, name: artist.name, type: "artist" as "track" };
   }
 

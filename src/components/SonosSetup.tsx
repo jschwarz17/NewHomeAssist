@@ -107,9 +107,9 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
         }
 
         addLog("--- Artist test ---");
-        addLog("Searching 'Dave Matthews'...");
+        addLog("Searching 'Dave Matthews Band'...");
         try {
-          const artistResult = await spotify.search("Dave Matthews", apiUrl);
+          const artistResult = await spotify.search("Dave Matthews Band", apiUrl);
           addLog(`Found: ${artistResult.name} (${artistResult.uri})`);
 
           addLog("Trying Sonos UPnP (artist)...");
