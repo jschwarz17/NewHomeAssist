@@ -88,6 +88,7 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
         const apiBase = process.env.NEXT_PUBLIC_ASSISTANT_API_URL?.replace(/\/+$/, "") || "";
         const apiUrl = apiBase ? `${apiBase}/api` : "/api";
 
+        addLog("--- Track test ---");
         addLog("Searching 'latin indie'...");
         try {
           const result = await spotify.search("latin indie", apiUrl);
@@ -97,24 +98,30 @@ export function SonosSetup({ onClose }: { onClose: () => void }) {
           try {
             const sonos = await import("@/lib/sonos-client");
             const msg = await sonos.playSpotify(result.uri, result.name, sp.name);
-            addLog(`OK UPnP: ${msg}`);
-            setTesting(false);
-            return;
+            addLog(`OK Track: ${msg}`);
           } catch (e) {
-            addLog(`UPnP err: ${e instanceof Error ? e.message : String(e)}`);
-          }
-
-          addLog("Trying Spotify Connect (wake+poll)...");
-          try {
-            const msg = await spotify.playOnDevice(result, sp.name, apiUrl);
-            addLog(`OK Connect: ${msg}`);
-            setTesting(false);
-            return;
-          } catch (e) {
-            addLog(`Connect err: ${e instanceof Error ? e.message : String(e)}`);
+            addLog(`Track err: ${e instanceof Error ? e.message : String(e)}`);
           }
         } catch (e) {
           addLog(`Search err: ${e instanceof Error ? e.message : String(e)}`);
+        }
+
+        addLog("--- Artist test ---");
+        addLog("Searching 'Dave Matthews'...");
+        try {
+          const artistResult = await spotify.search("Dave Matthews", apiUrl);
+          addLog(`Found: ${artistResult.name} (${artistResult.uri})`);
+
+          addLog("Trying Sonos UPnP (artist)...");
+          try {
+            const sonos = await import("@/lib/sonos-client");
+            const msg = await sonos.playSpotify(artistResult.uri, artistResult.name, sp.name);
+            addLog(`OK Artist: ${msg}`);
+          } catch (e) {
+            addLog(`Artist err: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        } catch (e) {
+          addLog(`Artist search err: ${e instanceof Error ? e.message : String(e)}`);
         }
       } else {
         addLog("No Spotify. Trying resume...");
