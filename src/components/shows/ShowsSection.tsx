@@ -1,14 +1,7 @@
 "use client";
 
 import { ShowCard } from "./ShowCard";
-import type { ShowCardProps } from "./ShowCard";
-
-export interface ShowsSectionItem
-  extends Omit<ShowCardProps, "isSelected" | "onSelect" | "onPlayTrailer" | "isLoadingTrailer"> {
-  id: string;
-  posterSearchQuery: string;
-  trailerSearchQuery: string;
-}
+import type { ShowsSectionItem } from "@/context/ShowsContext";
 
 interface ShowsSectionProps {
   title: string;
@@ -44,6 +37,8 @@ export function ShowsSection({
   onPlayTrailer,
   loading = false,
 }: ShowsSectionProps) {
+  if (!loading && items.length === 0) return null;
+
   return (
     <section className="mb-8">
       <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-3 px-1">

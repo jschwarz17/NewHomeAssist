@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { ShowMood } from "@/context/ShowsContext";
 
 export interface ShowCardProps {
   title: string;
@@ -8,13 +9,24 @@ export interface ShowCardProps {
   type: "movie" | "show";
   description: string;
   genre: string;
+  country: string;
+  language: string;
   streamingService: string;
   posterUrl: string | null;
+  mood: ShowMood;
   isSelected: boolean;
   onSelect: () => void;
   onPlayTrailer: () => void;
   isLoadingTrailer: boolean;
 }
+
+const MOOD_STYLES: Record<ShowMood, string> = {
+  fun: "bg-amber-900/40 text-amber-400",
+  gritty: "bg-red-900/40 text-red-400",
+  quirky: "bg-purple-900/40 text-purple-400",
+  funny: "bg-green-900/40 text-green-400",
+  suspenseful: "bg-blue-900/40 text-blue-400",
+};
 
 export function ShowCard({
   title,
@@ -22,13 +34,17 @@ export function ShowCard({
   type,
   description,
   genre,
+  country,
+  language,
   streamingService,
   posterUrl,
+  mood,
   isSelected,
   onSelect,
   onPlayTrailer,
   isLoadingTrailer,
 }: ShowCardProps) {
+  const isInternational = language && language.toLowerCase() !== "english";
   return (
     <div
       className={`rounded-xl border bg-zinc-950 transition-colors cursor-pointer ${
@@ -70,9 +86,19 @@ export function ShowCard({
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
               {genre}
             </span>
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded capitalize ${MOOD_STYLES[mood] ?? "bg-zinc-800 text-zinc-400"}`}
+            >
+              {mood}
+            </span>
+            {isInternational && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700/60 text-zinc-300 border border-zinc-600">
+                {country}
+              </span>
+            )}
           </div>
 
-          <p className="text-zinc-400 text-xs mt-1.5 line-clamp-3 leading-relaxed">
+          <p className={`text-zinc-400 text-xs mt-1.5 leading-relaxed ${isSelected ? "" : "line-clamp-3"}`}>
             {description}
           </p>
 

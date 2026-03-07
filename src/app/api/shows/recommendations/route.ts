@@ -8,15 +8,20 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+export type ShowMood = "fun" | "gritty" | "quirky" | "funny" | "suspenseful";
+
 export interface ShowItem {
   title: string;
   year: string;
   type: "movie" | "show";
   description: string;
   genre: string;
+  country: string;
+  language: string;
   streamingService: string;
   posterSearchQuery: string;
   trailerSearchQuery: string;
+  mood: ShowMood;
 }
 
 interface Cache {
@@ -26,23 +31,38 @@ interface Cache {
 }
 
 let cache: Cache | null = null;
-const CACHE_MS = 6 * 60 * 60 * 1000; // 6 hours
+const CACHE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const SYSTEM_PROMPT = `You are a movie and TV show recommendation engine. Return ONLY valid JSON, no markdown fences, no explanation.
 
 Return a JSON object with two arrays: "shows" (10 items) and "movies" (10 items).
 
-Content filter: Recommend action, suspense, thriller, or crime shows and movies. Focus on quality storytelling, compelling characters, and strong plots. Include a mix of recent hits and underrated classics. Prioritize titles currently available for streaming in the US.
+STRICT RULES:
+1. Only include titles released in 2025 or 2026. Do NOT include anything from 2024 or earlier.
+2. Primary genres: action, suspense, thriller, crime. Include exactly 2-3 comedy titles spread across shows and movies combined.
+3. All recommendations must be mainstream, broadly entertaining, and non-political. Avoid titles with heavy ideological messaging, social justice themes, or woke content. Focus on storytelling, tension, humor, and character.
+4. Prioritize titles currently available for streaming in the US.
+5. Each item must have a "mood" tag that best describes it — choose ONE from: "fun", "gritty", "quirky", "funny", "suspenseful".
+   - fun: light, adventurous, crowd-pleasing action or comedy
+   - gritty: dark, intense, realistic crime or thriller
+   - quirky: offbeat, unconventional, stylized
+   - funny: primarily comedy-driven
+   - suspenseful: edge-of-seat tension, mystery, psychological
+
+6. Across the combined 20 titles (10 shows + 10 movies), include exactly 3-4 international titles (non-English language originals, e.g. from South Korea, France, Spain, Germany, Japan, etc.). Spread them between shows and movies. They must still meet all other rules (2025/2026, action/thriller/crime primary, non-woke, mood tag).
 
 Each item must have exactly these fields:
-- title: string (exact title)
-- year: string (release year or range e.g. "2020–2023")
+- title: string (exact title in its original or most well-known English release title)
+- year: string (release year, e.g. "2025" or "2026")
 - type: "movie" or "show"
-- description: string (2–3 engaging sentences about the plot and why it is worth watching)
+- description: string (2-3 engaging sentences about the plot and why it is worth watching)
 - genre: string (e.g. "Action / Thriller")
-- streamingService: string (primary US streaming service, e.g. "Netflix", "Prime Video", "Hulu", "Disney+", "Max", "Paramount+", "Peacock", "Apple TV+")
-- posterSearchQuery: string (just the title, used for TMDB poster lookup)
-- trailerSearchQuery: string (YouTube search query for the official trailer, e.g. "Reacher Season 2 Official Trailer")`;
+- country: string (country of origin, e.g. "USA", "South Korea", "France")
+- language: string (original language, e.g. "English", "Korean", "French")
+- streamingService: string (primary US streaming service, e.g. "Netflix", "Prime Video", "Hulu", "Disney+", "Max", "Paramount+", "Peacock", "Apple TV+", "Theaters")
+- posterSearchQuery: string (just the title, used for poster lookup)
+- trailerSearchQuery: string (YouTube search query for the official trailer, e.g. "Warfare 2025 Official Trailer")
+- mood: string (one of: "fun", "gritty", "quirky", "funny", "suspenseful")`;
 
 export async function GET() {
   if (cache && Date.now() - cache.cachedAt < CACHE_MS) {
@@ -71,10 +91,10 @@ export async function GET() {
           {
             role: "user",
             content:
-              "Give me 10 TV show recommendations and 10 movie recommendations.",
+              "Give me 10 TV show recommendations and 10 movie recommendations from 2025 or 2026 only.",
           },
         ],
-        temperature: 0.85,
+        temperature: 0.75,
       }),
     });
 

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { VoiceProvider } from "@/context/VoiceProvider";
 import { YouTubeProvider, useYouTube } from "@/context/YouTubeContext";
 import { YouTubeOverlay } from "@/components/YouTubeOverlay";
+import { ShowsProvider } from "@/context/ShowsContext";
 
 function useSpotifyDeepLink() {
   useEffect(() => {
@@ -72,7 +73,9 @@ export function VoiceProviderWrapper({
 }) {
   return (
     <YouTubeProvider>
-      <VoiceProviderInner>{children}</VoiceProviderInner>
+      <ShowsProvider>
+        <VoiceProviderInner>{children}</VoiceProviderInner>
+      </ShowsProvider>
     </YouTubeProvider>
   );
 }
