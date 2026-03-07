@@ -92,33 +92,20 @@ async function callOpenMeteoWeather(location: string): Promise<{ ok: boolean; da
   }
 
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:90',message:'callOpenMeteoWeather entry',data:{location,candidates},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     let place: { latitude: number; longitude: number; name: string; admin1?: string; country?: string } | undefined;
-    let usedCandidate = '';
 
     for (const candidate of candidates) {
       const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(candidate)}&count=1&language=en&format=json`;
       const geoResp = await fetch(geoUrl);
       if (!geoResp.ok) continue;
       const geoData = await geoResp.json() as { results?: { latitude: number; longitude: number; name: string; admin1?: string; country?: string }[] };
-      // #region agent log
-      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:104',message:'geocode candidate result',data:{candidate,resultCount:geoData?.results?.length??0,firstResult:geoData?.results?.[0]??null},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (geoData?.results?.[0]) { place = geoData.results[0]; usedCandidate = candidate; break; }
+      if (geoData?.results?.[0]) { place = geoData.results[0]; break; }
     }
 
     // Hardcoded lat/lon fallback for default location (Brooklyn, NY)
     if (!place) {
       place = { latitude: 40.6501, longitude: -73.9496, name: 'Brooklyn', admin1: 'New York', country: 'US' };
-      usedCandidate = 'hardcoded-fallback';
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:115',message:'geocode resolved place',data:{place,usedCandidate},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     const wxUrl = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`;
     const wxResp = await fetch(wxUrl);
@@ -247,14 +234,7 @@ const DIRECT_ROUTES: DirectRoute[] = [
     rapidapi_host: "",
     base_url: "",
     match: /weather|forecast|temperature|raining|rain|hot outside|cold outside|sunny|cloudy|humid|snow|wind/i,
-    callFn: (q) => {
-      const extracted = extractLocation(q);
-      const resolved = extracted || DEFAULT_LOCATION;
-      // #region agent log
-      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:260',message:'weather callFn extract',data:{question:q,extracted,usedDefault:!extracted,resolved},hypothesisId:'H-A',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      return callOpenMeteoWeather(resolved);
-    },
+    callFn: (q) => callOpenMeteoWeather(extractLocation(q) || DEFAULT_LOCATION),
     build: () => ({ endpoint: "", method: "GET", params: {} }),
     format: formatWeather,
   },
@@ -266,9 +246,6 @@ const DIRECT_ROUTES: DirectRoute[] = [
     build: (q) => {
       const city = extractCityForTime(q);
       const params: Record<string, string> = city ? { city } : { timezone: DEFAULT_TIMEZONE };
-      // #region agent log
-      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:270',message:'world-time build params',data:{question:q,city,params,usingCityParam:!!city},hypothesisId:'H-E,H-F,H-G',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return { endpoint: "/v1/worldtime", method: "GET", params };
     },
     format: formatTime,
