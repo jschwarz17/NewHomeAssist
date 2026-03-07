@@ -15,6 +15,9 @@ export function Nav() {
       <Link href="/routines" className="text-zinc-400 hover:text-zinc-100 transition-colors">
         Routines
       </Link>
+      <Link href="/shows" className="text-zinc-400 hover:text-zinc-100 transition-colors">
+        Shows
+      </Link>
       <Link href="/settings" className="text-zinc-400 hover:text-zinc-100 transition-colors">
         Settings
       </Link>
