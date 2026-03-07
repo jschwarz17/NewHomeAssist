@@ -137,20 +137,12 @@ function formatWeather(d: unknown): string | null {
 
 function formatTime(d: unknown): string | null {
   const data = d as { datetime?: string; timezone?: string };
-  // #region agent log
-  console.log(`[DBG-8e30a8][formatTime] input=${JSON.stringify(data)}`);
-  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:140',message:'formatTime input',data:{rawData:data},hypothesisId:'H-B,H-C',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   if (!data?.datetime) return null;
   const dt = new Date(data.datetime.replace(" ", "T"));
   if (isNaN(dt.getTime())) return null;
   const timeStr = dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const tz = data.timezone?.split("/")[1]?.replace(/_/g, " ") ?? "your timezone";
-  const result = `It's ${timeStr} in ${tz}.`;
-  // #region agent log
-  console.log(`[DBG-8e30a8][formatTime] output="${result}"`);
-  // #endregion
-  return result;
+  return `It's ${timeStr} in ${tz}.`;
 }
 
 function formatNews(d: unknown): string | null {
@@ -254,10 +246,6 @@ const DIRECT_ROUTES: DirectRoute[] = [
     build: (q) => {
       const city = extractCityForTime(q);
       const params: Record<string, string> = city ? { city } : { timezone: DEFAULT_TIMEZONE };
-      // #region agent log
-      console.log(`[DBG-8e30a8][world-time] question="${q}" city="${city}" params=${JSON.stringify(params)}`);
-      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:257',message:'world-time build',data:{question:q,city,params},hypothesisId:'H-A,H-D',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return { endpoint: "/v1/worldtime", method: "GET", params };
     },
     format: formatTime,
@@ -432,9 +420,6 @@ export async function POST(req: NextRequest) {
 
       // #region agent log
       console.log(`[ARA-DEBUG][D] RapidAPI result ok=${result.ok} slug=${directRoute.slug} error=${result.error ?? "none"}`);
-      // #region agent log
-      if (directRoute.slug === "world-time") console.log(`[DBG-8e30a8][world-time] raw result=${JSON.stringify(result.data)}`);
-      // #endregion
       // #endregion
 
       if (!result.ok) {
