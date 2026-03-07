@@ -39,7 +39,7 @@ function buildVoiceInstructions(speakerId: SpeakerId, memories: string[]): strin
   base += " Do NOT assume who the user is. If the user tells you their name, use it. If they don't, don't guess or use any name. Be friendly and concise.";
 
   base += " You have a store_memory tool — use it aggressively. ANY time a user shares personal information (names, preferences, facts about their life, pet names, family details, allergies, routines, languages, important dates) or says anything like 'remember', 'don't forget', 'I want you to know', 'I want to teach you', 'learn this', or corrects you about a fact — call store_memory immediately. When in doubt, store it. After storing, briefly confirm what you remembered.";
-  base += " You have play_music, pause_music, and set_volume tools for Sonos. When the user asks to play something in a specific room (e.g. 'play Billie Ray Cyrus downstairs'), always call play_music with that room as the device — play only on that speaker. When the user asks to stop, pause, or turn off music in a specific room (e.g. 'stop the living room', 'turn off downstairs'), call pause_music with that room as the device. Default music: 'Latin indie' on Living Room. Available rooms: Living Room, Downstairs, Guest Bathroom, Master Bathroom.";
+  base += " You have play_music, pause_music, and set_volume tools for Sonos. When the user asks to play something in a specific room (e.g. 'play Billie Ray Cyrus downstairs'), always call play_music with that room as the device — play only on that speaker. When the user asks to stop or pause music IN A SPECIFIC ROOM (e.g. 'stop the living room', 'turn off downstairs'), call pause_music with that room as the device. When the user says 'stop the music' or 'pause' WITHOUT naming a room, call pause_music with NO device — the system will check which speakers are playing and either stop all (if same music) or ask which to stop (if different music). IMPORTANT: Do NOT assume a room when the user doesn't say one. Default music: 'Latin indie' on Living Room. Available rooms: Living Room, Downstairs, Guest Bathroom, Master Bathroom.";
   base += " You have a play_youtube tool to show YouTube videos on screen. When the user wants to watch something, search YouTube and embed it for them. You also have a close_video tool — ALWAYS call close_video when the user wants to stop watching a video or go back. This includes 'stop', 'stop the video', 'go back', 'dashboard', 'done', 'close', 'exit', 'turn it off', or anything similar. If a video is playing and the user says 'stop', use close_video, NOT pause_music.";
 
   if (memories.length > 0) {
@@ -231,7 +231,36 @@ export function VoiceProvider({
         onPauseMusic: async (device) => {
           try {
             const sonos = await import("@/lib/sonos-client");
-            return await sonos.pause(device);
+
+            if (device) {
+              return await sonos.pause(device);
+            }
+
+            const statuses = await sonos.getPlayingStatus();
+            const playing = statuses.filter(s => s.playing);
+
+            if (playing.length === 0) {
+              return "No music is currently playing on any speaker.";
+            }
+
+            if (playing.length === 1) {
+              await sonos.pause(playing[0].name);
+              return `Stopped music in ${playing[0].name}.`;
+            }
+
+            const contentIds = new Set(playing.map(s => s.contentId));
+            if (contentIds.size <= 1) {
+              for (const s of playing) {
+                await sonos.pause(s.name);
+              }
+              return `Stopped music in ${playing.map(s => s.name).join(" and ")}.`;
+            }
+
+            const descriptions = playing.map(s => {
+              const what = s.trackTitle || "music";
+              return `${s.name} is playing ${what}`;
+            });
+            return `Different music is playing on multiple speakers: ${descriptions.join(", ")}. Which would you like me to stop?`;
           } catch (e) {
             return e instanceof Error ? e.message : "Could not pause";
           }
@@ -344,10 +373,17 @@ export function VoiceProvider({
             const task = String(c.task).toLowerCase();
             const value = (c.value ?? "").trim();
             if (task === "sonos_pause" || task === "sonos_stop") {
-              const device = value || "living room";
               if (sonos?.pause) {
                 try {
-                  await sonos.pause(device);
+                  if (value) {
+                    await sonos.pause(value);
+                  } else {
+                    const statuses = await sonos.getPlayingStatus();
+                    const playing = statuses.filter(s => s.playing);
+                    for (const s of playing) {
+                      await sonos.pause(s.name);
+                    }
+                  }
                 } catch (e) {
                   setError(e instanceof Error ? e.message : "Could not pause Sonos");
                 }

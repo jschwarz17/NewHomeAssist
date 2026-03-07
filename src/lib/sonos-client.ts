@@ -198,6 +198,61 @@ export async function setAVTransportURI(uri: string, roomName?: string): Promise
   return `Playing on ${speaker.name}`;
 }
 
+export interface SpeakerStatus {
+  name: string;
+  ip: string;
+  playing: boolean;
+  contentId: string;
+  trackTitle: string;
+}
+
+function extractContentId(uri: string): string {
+  try {
+    const decoded = decodeURIComponent(uri);
+    const m = decoded.match(/spotify:(track|playlist|album|artist|show|episode):[a-zA-Z0-9]+/);
+    if (m) return m[0];
+  } catch { /* ignore */ }
+  return uri.split("?")[0] || uri;
+}
+
+/**
+ * Query all configured speakers in parallel for current playback state.
+ * Returns which speakers are playing and what content they have.
+ */
+export async function getPlayingStatus(): Promise<SpeakerStatus[]> {
+  const speakers = getSpeakers();
+  return Promise.all(
+    speakers.map(async (speaker): Promise<SpeakerStatus> => {
+      const status: SpeakerStatus = { name: speaker.name, ip: speaker.ip, playing: false, contentId: "", trackTitle: "" };
+      try {
+        const xml = await soapRequest(
+          speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT,
+          "GetTransportInfo", "<InstanceID>0</InstanceID>"
+        );
+        const dec = xml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+        const state = dec.match(/<CurrentTransportState>([^<]*)<\/CurrentTransportState>/)?.[1] ?? "";
+        status.playing = state === "PLAYING" || state === "TRANSITIONING";
+
+        if (status.playing) {
+          const posXml = await soapRequest(
+            speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT,
+            "GetPositionInfo", "<InstanceID>0</InstanceID>"
+          );
+          const posDec = posXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+          const trackUri = posDec.match(/<TrackURI>([^<]*)<\/TrackURI>/)?.[1] ?? "";
+          status.contentId = extractContentId(trackUri);
+          const metaRaw = posDec.match(/<TrackMetaData>([^<]*)<\/TrackMetaData>/)?.[1] ?? "";
+          if (metaRaw) {
+            const metaDec = metaRaw.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+            status.trackTitle = metaDec.match(/<dc:title>([^<]*)<\/dc:title>/)?.[1] ?? "";
+          }
+        }
+      } catch { /* speaker unreachable */ }
+      return status;
+    })
+  );
+}
+
 /**
  * Discover all speakers on the network by querying one known speaker
  * for its ZoneGroupTopology via SOAP (most reliable method).

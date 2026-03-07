@@ -91,16 +91,17 @@ const PAUSE_MUSIC_TOOL = {
   type: "function",
   name: "pause_music",
   description:
-    "Pause or stop music on a specific Sonos speaker (room). Call this when the user says:\n" +
-    "- 'stop the living room', 'pause downstairs', 'turn off the kitchen', 'stop playing in the bedroom' → pass that room as 'device'.\n" +
-    "- 'stop the music', 'pause', 'turn off the music', 'silence' (no room given) → use 'Living Room' as device, or the room they were last using.\n" +
-    "Always pass the room name the user said when they name a location. Available rooms: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
+    "Pause or stop music on Sonos speakers. Call this when the user says:\n" +
+    "- 'stop the living room', 'pause downstairs', 'turn off the kitchen' → pass that room as 'device'.\n" +
+    "- 'stop the music', 'pause', 'turn off the music', 'silence' (NO room named) → do NOT pass a device. " +
+    "The system will check which speakers are playing and handle it automatically (stop all if same music, or ask user if different music is on different speakers).\n" +
+    "IMPORTANT: Only pass 'device' when the user explicitly names a room. If they just say 'stop' or 'stop the music' without naming a room, omit 'device' entirely.",
   parameters: {
     type: "object",
     properties: {
       device: {
         type: "string",
-        description: "Which room/speaker to pause or stop. Use the exact room the user said (e.g. 'Living Room', 'Downstairs'). If they did not name a room, use 'Living Room'.",
+        description: "The specific room the user named (e.g. 'Living Room', 'Downstairs'). OMIT this if the user did not name a room.",
       },
     },
   },
@@ -253,7 +254,7 @@ export async function startGrokRealtimeVoice(
       }
 
       if (name === "pause_music") {
-        const device = parsed.device || "living room";
+        const device = parsed.device || "";
         if (onPauseMusic) {
           const result = await onPauseMusic(device);
           respondToFunctionCall(callId, { success: true, message: result });
