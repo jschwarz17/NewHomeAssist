@@ -120,10 +120,6 @@ export async function GET() {
     const raw =
       messageItem?.content?.find((c) => c.type === "output_text")?.text ?? "";
 
-    // #region agent log
-    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'recommendations/route.ts:raw-parse',message:'Grok raw output info',data:{outputItemTypes:(data.output as OutputItem[]|undefined)?.map(o=>o.type),messageItemFound:!!messageItem,rawLength:raw.length,rawSnippet:raw.slice(0,300)},timestamp:Date.now(),hypothesisId:'H-B'})}).catch(()=>{});
-    // #endregion
-
     const jsonStr = raw
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -131,10 +127,6 @@ export async function GET() {
       .trim();
 
     const parsed = JSON.parse(jsonStr);
-
-    // #region agent log
-    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'recommendations/route.ts:parsed-items',message:'Parsed Grok titles sample',data:{showCount:(parsed.shows??[]).length,movieCount:(parsed.movies??[]).length,firstShow:parsed.shows?.[0] ? {title:parsed.shows[0].title,year:parsed.shows[0].year,tmdbSearchTitle:parsed.shows[0].tmdbSearchTitle} : null,firstMovie:parsed.movies?.[0] ? {title:parsed.movies[0].title,year:parsed.movies[0].year,tmdbSearchTitle:parsed.movies[0].tmdbSearchTitle} : null,allTitles:[...(parsed.shows??[]).map((s:{title:string})=>s.title),...(parsed.movies??[]).map((m:{title:string})=>m.title)]},timestamp:Date.now(),hypothesisId:'H-B,H-E,H-F'})}).catch(()=>{});
-    // #endregion
 
     cache = {
       shows: parsed.shows ?? [],
