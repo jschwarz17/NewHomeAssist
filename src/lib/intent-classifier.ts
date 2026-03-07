@@ -159,7 +159,7 @@ async function classifyWithClaude(transcript: string): Promise<ClassifyIntentRes
     const { Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey: key });
     const msg = await client.messages.create({
-      model: "claude-3-5-haiku-20241022",
+      model: "claude-3-5-haiku-latest",
       max_tokens: 32,
       messages: [
         {

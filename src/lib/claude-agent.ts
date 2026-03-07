@@ -14,7 +14,7 @@ import { getTaskerConfig, formatCapabilitiesForClaude } from "./config-loader";
 import { executeTaskerCommand } from "./tasker-executor";
 
 const MAX_TURNS = 5;
-const MODEL = "claude-3-5-haiku-20241022";
+const MODEL = "claude-3-5-haiku-latest";
 
 export type SpeakerId = "jesse" | "vanessa" | null;
 

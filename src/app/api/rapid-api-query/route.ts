@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getActiveServices, type RapidApiService } from "@/lib/rapid-api-db";
 
-const MODEL = "claude-3-5-haiku-20241022";
+const MODEL = "claude-3-5-haiku-latest";
 
 /** Default location for Ara: Park Slope, Brooklyn, New York */
 const DEFAULT_LOCATION = "Park Slope, Brooklyn, NY";
