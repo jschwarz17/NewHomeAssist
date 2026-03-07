@@ -84,12 +84,21 @@ const WMO_CODES: Record<number, string> = {
 
 async function callOpenMeteoWeather(location: string): Promise<{ ok: boolean; data?: unknown; error?: string }> {
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:88',message:'callOpenMeteoWeather entry',data:{location},hypothesisId:'H-A,H-D',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     // Step 1: geocode
     const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
     const geoResp = await fetch(geoUrl);
+    // #region agent log
+    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:93',message:'geocode HTTP response',data:{geoUrl,status:geoResp.status,ok:geoResp.ok},hypothesisId:'H-C',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!geoResp.ok) return { ok: false, error: `Geocoding failed: ${geoResp.status}` };
     const geoData = await geoResp.json() as { results?: { latitude: number; longitude: number; name: string; admin1?: string; country?: string }[] };
     const place = geoData?.results?.[0];
+    // #region agent log
+    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:97',message:'geocode results',data:{resultCount:geoData?.results?.length??0,firstResult:place??null},hypothesisId:'H-A,H-B',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!place) return { ok: false, error: `Location not found: ${location}` };
 
     // Step 2: fetch weather
@@ -220,7 +229,14 @@ const DIRECT_ROUTES: DirectRoute[] = [
     rapidapi_host: "",
     base_url: "",
     match: /weather|forecast|temperature|raining|rain|hot outside|cold outside|sunny|cloudy|humid|snow|wind/i,
-    callFn: (q) => callOpenMeteoWeather(extractLocation(q) || DEFAULT_LOCATION),
+    callFn: (q) => {
+      const extracted = extractLocation(q);
+      const resolved = extracted || DEFAULT_LOCATION;
+      // #region agent log
+      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e30a8'},body:JSON.stringify({sessionId:'8e30a8',location:'rapid-api-query/route.ts:232',message:'weather callFn extract',data:{question:q,extracted,usedDefault:!extracted,resolved},hypothesisId:'H-B,H-D',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return callOpenMeteoWeather(resolved);
+    },
     build: () => ({ endpoint: "", method: "GET", params: {} }),
     format: formatWeather,
   },
