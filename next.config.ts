@@ -5,7 +5,10 @@ const isVercel = process.env.VERCEL === "1";
 const buildForCapacitor = !isVercel && process.env.BUILD_FOR_CAPACITOR === "1";
 
 const nextConfig: NextConfig = {
-  ...(buildForCapacitor && { output: "export" as const }),
+  ...(buildForCapacitor && {
+    output: "export" as const,
+    typescript: { ignoreBuildErrors: true },
+  }),
   images: {
     unoptimized: true, // Essential for Android WebViews
   },

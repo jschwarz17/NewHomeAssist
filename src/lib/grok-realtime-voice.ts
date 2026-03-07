@@ -48,11 +48,11 @@ const PLAY_MUSIC_TOOL = {
   type: "function",
   name: "play_music",
   description:
-    "Play music on the household Sonos speakers. Call this when the user says anything like " +
-    "'play some music', 'put on music', 'play a song', 'I want to listen to...', or names a genre/artist/playlist.\n\n" +
-    "Defaults: if no music is specified, play the 'Latin indie' playlist on Spotify. " +
-    "If no device/room is specified, default to 'Living Room'.\n" +
-    "Available speakers: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
+    "Play music on ONE Sonos speaker only. Call when the user says 'play...', 'put on...', 'I want to listen to...', or names an artist/song/playlist.\n\n" +
+    "CRITICAL — Location: If the user names a room or location (e.g. 'play X downstairs', 'in the living room', 'on the kitchen speaker', 'in the bedroom'), you MUST pass that exact location as 'device'. Play ONLY on that speaker; do not default to Living Room. " +
+    "If no room is specified, then default to 'Living Room'.\n" +
+    "Available speakers: Living Room, Downstairs, Guest Bathroom, Master Bathroom (or whatever room names the user uses — match their words).\n" +
+    "Music default: if no artist/song given, use 'Latin indie' for query.",
   parameters: {
     type: "object",
     properties: {
@@ -62,7 +62,7 @@ const PLAY_MUSIC_TOOL = {
       },
       device: {
         type: "string",
-        description: "Which room/speaker to play on. Default: 'Living Room'. Options: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
+        description: "The exact room/speaker the user asked for (e.g. 'Downstairs', 'Living Room'). Required when user specifies a location. Play only on this speaker.",
       },
     },
   },
@@ -91,14 +91,16 @@ const PAUSE_MUSIC_TOOL = {
   type: "function",
   name: "pause_music",
   description:
-    "Pause or stop the music currently playing on Sonos speakers. " +
-    "Call this when the user says 'pause', 'stop the music', 'turn off the music', 'silence', etc.",
+    "Pause or stop music on a specific Sonos speaker (room). Call this when the user says:\n" +
+    "- 'stop the living room', 'pause downstairs', 'turn off the kitchen', 'stop playing in the bedroom' → pass that room as 'device'.\n" +
+    "- 'stop the music', 'pause', 'turn off the music', 'silence' (no room given) → use 'Living Room' as device, or the room they were last using.\n" +
+    "Always pass the room name the user said when they name a location. Available rooms: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
   parameters: {
     type: "object",
     properties: {
       device: {
         type: "string",
-        description: "Which room/speaker to pause. Default: 'Living Room'. Options: Living Room, Downstairs, Guest Bathroom, Master Bathroom.",
+        description: "Which room/speaker to pause or stop. Use the exact room the user said (e.g. 'Living Room', 'Downstairs'). If they did not name a room, use 'Living Room'.",
       },
     },
   },

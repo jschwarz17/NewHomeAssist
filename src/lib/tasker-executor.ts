@@ -5,6 +5,9 @@
 
 import { getTaskerConfig, getActionConfigByTaskName } from "./config-loader";
 
+/** Sonos tasks are handled by the app (Sonos API/client); always allow and pass through task + value. */
+const SONOS_PASSTHROUGH_TASKS = new Set(["sonos_play", "sonos_pause", "sonos_stop"]);
+
 export interface TaskerCommandResult {
   success: boolean;
   result: string;
@@ -26,6 +29,17 @@ export async function executeTaskerCommand(
   try {
     const config = await getTaskerConfig();
     const actionInfo = getActionConfigByTaskName(taskerTask, config);
+
+    if (!actionInfo && SONOS_PASSTHROUGH_TASKS.has(taskerTask)) {
+      const value = params?.value != null ? String(params.value) : "";
+      return {
+        success: true,
+        result: "passthrough",
+        executionTime: Date.now() - start,
+        task: taskerTask,
+        value,
+      };
+    }
 
     if (!actionInfo) {
       return {

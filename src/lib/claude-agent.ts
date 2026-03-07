@@ -39,12 +39,12 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "execute_tasker_task",
     description:
-      "Execute a Tasker automation. Use the task name from capabilities (e.g. dim_lights, lights, sonos_play). Pass params like value (e.g. on, off, 50) or other action-specific params.",
+      "Execute a Tasker automation. Use the task name from capabilities (e.g. dim_lights, lights, sonos_play, sonos_pause). Pass params like value (e.g. on, off, 50). For Sonos: sonos_play value = 'query' or 'query|device' (e.g. 'Billie Ray Cyrus|Downstairs') to play only on that room; sonos_pause value = room name (e.g. 'Living Room', 'Downstairs') to stop/pause that speaker.",
     input_schema: {
       type: "object" as const,
       properties: {
-        task: { type: "string", description: "Task name from config (e.g. dim_lights, lights, sonos_play)" },
-        value: { type: "string", description: "Value for the task (e.g. on, off, 50)" },
+        task: { type: "string", description: "Task name (e.g. dim_lights, lights, sonos_play, sonos_pause)" },
+        value: { type: "string", description: "Value for the task. For sonos_play use 'query' or 'query|device'; for sonos_pause use room name." },
         params: { type: "object", description: "Additional params if needed" },
       },
       required: ["task"],

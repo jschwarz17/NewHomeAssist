@@ -39,7 +39,7 @@ function buildVoiceInstructions(speakerId: SpeakerId, memories: string[]): strin
   base += " Do NOT assume who the user is. If the user tells you their name, use it. If they don't, don't guess or use any name. Be friendly and concise.";
 
   base += " You have a store_memory tool — use it aggressively. ANY time a user shares personal information (names, preferences, facts about their life, pet names, family details, allergies, routines, languages, important dates) or says anything like 'remember', 'don't forget', 'I want you to know', 'I want to teach you', 'learn this', or corrects you about a fact — call store_memory immediately. When in doubt, store it. After storing, briefly confirm what you remembered.";
-  base += " You have play_music, pause_music, and set_volume tools for Sonos speakers. Default music: 'Latin indie' playlist on Living Room speakers. Available rooms: Living Room, Downstairs, Guest Bathroom, Master Bathroom. Use pause_music to stop, set_volume to adjust loudness.";
+  base += " You have play_music, pause_music, and set_volume tools for Sonos. When the user asks to play something in a specific room (e.g. 'play Billie Ray Cyrus downstairs'), always call play_music with that room as the device — play only on that speaker. When the user asks to stop, pause, or turn off music in a specific room (e.g. 'stop the living room', 'turn off downstairs'), call pause_music with that room as the device. Default music: 'Latin indie' on Living Room. Available rooms: Living Room, Downstairs, Guest Bathroom, Master Bathroom.";
   base += " You have a play_youtube tool to show YouTube videos on screen. When the user wants to watch something, search YouTube and embed it for them. You also have a close_video tool — ALWAYS call close_video when the user wants to stop watching a video or go back. This includes 'stop', 'stop the video', 'go back', 'dashboard', 'done', 'close', 'exit', 'turn it off', or anything similar. If a video is playing and the user says 'stop', use close_video, NOT pause_music.";
 
   if (memories.length > 0) {
@@ -337,9 +337,39 @@ export function VoiceProvider({
             ? [data.taskerCommand]
             : [];
         if (commands.length) {
-          const { sendTaskerCommand } = await import("@/lib/tasker");
+          const sonos = await import("@/lib/sonos-client").catch(() => null);
+          const spotify = await import("@/lib/spotify-client").catch(() => null);
           for (const c of commands) {
-            if (c?.task != null) await sendTaskerCommand(c.task, c.value ?? "");
+            if (c?.task == null) continue;
+            const task = String(c.task).toLowerCase();
+            const value = (c.value ?? "").trim();
+            if (task === "sonos_pause" || task === "sonos_stop") {
+              const device = value || "living room";
+              if (sonos?.pause) {
+                try {
+                  await sonos.pause(device);
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Could not pause Sonos");
+                }
+              }
+              continue;
+            }
+            if (task === "sonos_play" && sonos) {
+              const [query, device] = value.includes("|")
+                ? value.split("|").map((s) => s.trim())
+                : [value || "Latin indie", "living room"];
+              try {
+                if (spotify?.isLoggedIn?.()) {
+                  const searchResult = await spotify.search(query, apiBaseUrl);
+                  await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                } else {
+                  await sonos.play(device);
+                }
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Could not play on Sonos");
+              }
+              continue;
+            }
           }
         }
       } catch (e) {

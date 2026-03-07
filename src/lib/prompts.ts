@@ -11,10 +11,11 @@ const DEFAULT_LOCATION = "Park Slope, Brooklyn";
 
 /** Default music: device, service, and playlist when user says "play music" with no artist. */
 const MUSIC_DEFAULTS = `
-- Default music device: Sonos Living Room.
-- Default service: Spotify.
-- When the user says "play music" with no artist, play the Latin indie playlist on Spotify on Sonos Living Room.
-- When the user names an artist (e.g. "play Bad Bunny"), play that artist on Spotify on Sonos Living Room.
+- Default music device: Sonos Living Room. Default service: Spotify.
+- When the user says "play music" or "play [artist]" with no room, use Sonos Living Room.
+- When the user specifies a room/location (e.g. "play X downstairs", "in the living room"), play ONLY on that speaker: use execute_tasker_task with task "sonos_play" and value "query|device" (e.g. "Billie Ray Cyrus|Downstairs"). Never play on a different room than the one requested.
+- To stop or pause a specific room: use task "sonos_pause" with value = room name (e.g. "Living Room", "Downstairs"). Use when the user says "stop the living room", "pause downstairs", "turn off the kitchen", etc.
+- When the user names an artist (e.g. "play Bad Bunny"), play that artist on the requested or default Sonos room only.
 `.trim();
 
 const JESSE_STATIC = `
