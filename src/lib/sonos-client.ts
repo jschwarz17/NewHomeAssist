@@ -113,19 +113,76 @@ async function resolveCoordinator(speakerIp: string): Promise<string> {
   return speakerIp;
 }
 
+/**
+ * Remove a speaker from its current Sonos group so commands only affect it.
+ * Uses BecomeCoordinatorOfStandaloneGroup — a no-op when already standalone.
+ * Other speakers in the former group continue playing unaffected.
+ */
+async function ensureStandalone(speakerIp: string): Promise<void> {
+  try {
+    const mediaXml = await soapRequest(
+      speakerIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetMediaInfo",
+      "<InstanceID>0</InstanceID>"
+    );
+    const decoded = mediaXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const currentUri = decoded.match(/<CurrentURI>([^<]*)<\/CurrentURI>/)?.[1] ?? "";
+
+    const isGroupMember = currentUri.startsWith("x-rincon:");
+
+    const topoXml = await soapRequest(
+      speakerIp,
+      "/ZoneGroupTopology/Control",
+      "urn:schemas-upnp-org:service:ZoneGroupTopology:1",
+      "GetZoneGroupState",
+      ""
+    );
+    const topoDec = topoXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+
+    let isCoordinatorWithMembers = false;
+    if (!isGroupMember) {
+      const speakerUuid = getSpeakers().find(s => s.ip === speakerIp)?.uuid;
+      if (speakerUuid) {
+        const groupRe = /<ZoneGroup\s[^>]*Coordinator="([^"]*)"[^>]*>([\s\S]*?)<\/ZoneGroup>/gi;
+        let gm;
+        while ((gm = groupRe.exec(topoDec)) !== null) {
+          if (gm[1] === speakerUuid) {
+            const memberCount = (gm[2].match(/<ZoneGroupMember\s/gi) || []).length;
+            if (memberCount > 1) isCoordinatorWithMembers = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (isGroupMember || isCoordinatorWithMembers) {
+      await soapRequest(
+        speakerIp, AV_TRANSPORT_PATH, AV_TRANSPORT,
+        "BecomeCoordinatorOfStandaloneGroup",
+        "<InstanceID>0</InstanceID>"
+      );
+    }
+  } catch {
+    // If anything fails, continue — worst case the speaker is still grouped
+  }
+}
+
 export async function play(roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
-  const targetIp = await resolveCoordinator(speaker.ip);
-  await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  await ensureStandalone(speaker.ip);
+  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
   return `Playing on ${speaker.name}`;
 }
 
 export async function pause(roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured.");
-  const targetIp = await resolveCoordinator(speaker.ip);
-  await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Pause", "<InstanceID>0</InstanceID>");
+  await ensureStandalone(speaker.ip);
+  try {
+    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Pause", "<InstanceID>0</InstanceID>");
+  } catch {
+    // After unjoining a group member, there may be nothing to pause — that's fine
+  }
   return `Paused ${speaker.name}`;
 }
 
@@ -146,15 +203,15 @@ export async function setVolume(volume: number, roomName?: string): Promise<stri
 export async function setAVTransportURI(uri: string, roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured.");
-  const targetIp = await resolveCoordinator(speaker.ip);
+  await ensureStandalone(speaker.ip);
   await soapRequest(
-    targetIp,
+    speaker.ip,
     AV_TRANSPORT_PATH,
     AV_TRANSPORT,
     "SetAVTransportURI",
     `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(uri)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
   );
-  await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
   return `Playing on ${speaker.name}`;
 }
 
@@ -511,14 +568,14 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
 
-  const targetIp = await resolveCoordinator(speaker.ip);
-  const svc = await getSpotifyServiceInfo(targetIp);
+  await ensureStandalone(speaker.ip);
+  const ip = speaker.ip;
+  const svc = await getSpotifyServiceInfo(ip);
 
   // #region agent log
-  console.log(`[sonos-debug] playSpotify: target=${targetIp} (speaker=${speaker.ip}) uri=${spotifyUri} sid=${svc.sid} sn=${svc.sn} token=${svc.accountToken}`);
+  console.log(`[sonos-debug] playSpotify: target=${ip} uri=${spotifyUri} sid=${svc.sid} sn=${svc.sn} token=${svc.accountToken}`);
   // #endregion
 
-  // Artist URIs need x-sonosapi-radio format (not x-sonos-spotify)
   if (spotifyUri.startsWith("spotify:artist:")) {
     const encodedUri = spotifyUri.replace(/:/g, "%3a");
     const radioUri = `x-sonosapi-radio:${encodedUri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
@@ -532,13 +589,12 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
       `</item></DIDL-Lite>`;
     try {
       await soapRequest(
-        targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+        ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
         `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(radioUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(radioMeta)}</CurrentURIMetaData>`
       );
-      await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+      await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
       return `Playing "${title}" radio on ${speaker.name}`;
     } catch (e) {
-      // Fall through to track-based attempts
       console.log(`[sonos-debug] artist radio failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
@@ -549,44 +605,41 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
   const metadata = buildSpotifyMetadata(uri, title, svc);
   const errors: string[] = [];
 
-  // Attempt 1: SetAVTransportURI with metadata
   try {
     await soapRequest(
-      targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+      ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
       `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>`
     );
-    await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
     return `Playing "${title}" on ${speaker.name}`;
   } catch (e) {
     errors.push(`attempt1: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Attempt 2: SetAVTransportURI without metadata
   try {
     await soapRequest(
-      targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+      ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
       `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(sonosUri)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
     );
-    await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
     return `Playing "${title}" on ${speaker.name}`;
   } catch (e) {
     errors.push(`attempt2: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Attempt 3: AddURIToQueue then play from queue
   try {
-    const uuid = speaker.uuid ?? await getSpeakerUuid(targetIp);
+    const uuid = speaker.uuid ?? await getSpeakerUuid(ip);
     await soapRequest(
-      targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "AddURIToQueue",
+      ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "AddURIToQueue",
       `<InstanceID>0</InstanceID><EnqueuedURI>${escapeXml(sonosUri)}</EnqueuedURI><EnqueuedURIMetaData>${escapeXml(metadata)}</EnqueuedURIMetaData><DesiredFirstTrackNumberEnqueued>0</DesiredFirstTrackNumberEnqueued><EnqueueAsNext>1</EnqueueAsNext>`
     );
     if (uuid) {
       await soapRequest(
-        targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+        ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
         `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(`x-rincon-queue:${uuid}#0`)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
       );
     }
-    await soapRequest(targetIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+    await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
     return `Playing "${title}" on ${speaker.name}`;
   } catch (e) {
     errors.push(`attempt3: ${e instanceof Error ? e.message : String(e)}`);
