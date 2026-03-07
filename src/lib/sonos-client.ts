@@ -114,74 +114,57 @@ async function resolveCoordinator(speakerIp: string): Promise<string> {
 }
 
 /**
- * Remove a speaker from its current Sonos group so commands only affect it.
- * Uses BecomeCoordinatorOfStandaloneGroup — a no-op when already standalone.
- * Other speakers in the former group continue playing unaffected.
+ * Try to remove a speaker from its Sonos group so commands target only it.
+ * Always attempts BecomeCoordinatorOfStandaloneGroup (no-op when already standalone).
+ * Returns true if the speaker is confirmed standalone afterward.
  */
-async function ensureStandalone(speakerIp: string): Promise<void> {
+async function ensureStandalone(speakerIp: string): Promise<boolean> {
   try {
-    const mediaXml = await soapRequest(
-      speakerIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetMediaInfo",
+    await soapRequest(
+      speakerIp, AV_TRANSPORT_PATH, AV_TRANSPORT,
+      "BecomeCoordinatorOfStandaloneGroup",
       "<InstanceID>0</InstanceID>"
     );
-    const decoded = mediaXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
-    const currentUri = decoded.match(/<CurrentURI>([^<]*)<\/CurrentURI>/)?.[1] ?? "";
-
-    const isGroupMember = currentUri.startsWith("x-rincon:");
-
-    const topoXml = await soapRequest(
-      speakerIp,
-      "/ZoneGroupTopology/Control",
-      "urn:schemas-upnp-org:service:ZoneGroupTopology:1",
-      "GetZoneGroupState",
-      ""
-    );
-    const topoDec = topoXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
-
-    let isCoordinatorWithMembers = false;
-    if (!isGroupMember) {
-      const speakerUuid = getSpeakers().find(s => s.ip === speakerIp)?.uuid;
-      if (speakerUuid) {
-        const groupRe = /<ZoneGroup\s[^>]*Coordinator="([^"]*)"[^>]*>([\s\S]*?)<\/ZoneGroup>/gi;
-        let gm;
-        while ((gm = groupRe.exec(topoDec)) !== null) {
-          if (gm[1] === speakerUuid) {
-            const memberCount = (gm[2].match(/<ZoneGroupMember\s/gi) || []).length;
-            if (memberCount > 1) isCoordinatorWithMembers = true;
-            break;
-          }
-        }
-      }
-    }
-
-    if (isGroupMember || isCoordinatorWithMembers) {
-      await soapRequest(
-        speakerIp, AV_TRANSPORT_PATH, AV_TRANSPORT,
-        "BecomeCoordinatorOfStandaloneGroup",
-        "<InstanceID>0</InstanceID>"
-      );
-    }
-  } catch {
-    // If anything fails, continue — worst case the speaker is still grouped
+    return true;
+  } catch (e) {
+    console.log(`[sonos] unjoin failed for ${speakerIp}: ${e instanceof Error ? e.message : String(e)}`);
   }
+  return false;
+}
+
+/**
+ * Resolve which IP to send transport commands to for a speaker.
+ * Tries to unjoin the speaker first so it becomes standalone.
+ * Falls back to the group coordinator if unjoin fails and the speaker is grouped.
+ */
+async function resolveTargetIp(speakerIp: string): Promise<string> {
+  const standalone = await ensureStandalone(speakerIp);
+  if (standalone) return speakerIp;
+  return resolveCoordinator(speakerIp);
 }
 
 export async function play(roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
-  await ensureStandalone(speaker.ip);
-  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  const ip = await resolveTargetIp(speaker.ip);
+  await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
   return `Playing on ${speaker.name}`;
 }
 
 export async function pause(roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured.");
-  await ensureStandalone(speaker.ip);
-  try {
-    await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Pause", "<InstanceID>0</InstanceID>");
-  } catch {
-    // After unjoining a group member, there may be nothing to pause — that's fine
+  const standalone = await ensureStandalone(speaker.ip);
+  if (standalone) {
+    try {
+      await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Pause", "<InstanceID>0</InstanceID>");
+    } catch {
+      // After unjoining a group member there may be nothing to pause
+    }
+  } else {
+    // Unjoin failed — pause through coordinator (affects whole group as last resort)
+    const coordIp = await resolveCoordinator(speaker.ip);
+    await soapRequest(coordIp, AV_TRANSPORT_PATH, AV_TRANSPORT, "Pause", "<InstanceID>0</InstanceID>");
   }
   return `Paused ${speaker.name}`;
 }
@@ -203,15 +186,15 @@ export async function setVolume(volume: number, roomName?: string): Promise<stri
 export async function setAVTransportURI(uri: string, roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured.");
-  await ensureStandalone(speaker.ip);
+  const ip = await resolveTargetIp(speaker.ip);
   await soapRequest(
-    speaker.ip,
+    ip,
     AV_TRANSPORT_PATH,
     AV_TRANSPORT,
     "SetAVTransportURI",
     `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(uri)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
   );
-  await soapRequest(speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
   return `Playing on ${speaker.name}`;
 }
 
@@ -568,13 +551,10 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
 
-  await ensureStandalone(speaker.ip);
-  const ip = speaker.ip;
+  const ip = await resolveTargetIp(speaker.ip);
   const svc = await getSpotifyServiceInfo(ip);
 
-  // #region agent log
-  console.log(`[sonos-debug] playSpotify: target=${ip} uri=${spotifyUri} sid=${svc.sid} sn=${svc.sn} token=${svc.accountToken}`);
-  // #endregion
+  console.log(`[sonos] playSpotify: target=${ip} speaker=${speaker.name} (${speaker.ip}) uri=${spotifyUri}`);
 
   if (spotifyUri.startsWith("spotify:artist:")) {
     const encodedUri = spotifyUri.replace(/:/g, "%3a");
@@ -595,7 +575,7 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
       await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
       return `Playing "${title}" radio on ${speaker.name}`;
     } catch (e) {
-      console.log(`[sonos-debug] artist radio failed: ${e instanceof Error ? e.message : String(e)}`);
+      console.log(`[sonos] artist radio failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -645,7 +625,7 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
     errors.push(`attempt3: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  throw new Error(`All playback attempts failed. ${errors.join(" | ")}`);
+  throw new Error(`All playback attempts failed on ${speaker.name}. ${errors.join(" | ")}`);
 }
 
 function getSpotifyUriType(uri: string): { idPrefix: string; upnpClass: string } {
