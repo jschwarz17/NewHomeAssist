@@ -143,6 +143,27 @@ const CLOSE_VIDEO_TOOL = {
   parameters: { type: "object", properties: {} },
 };
 
+const USE_NEW_TOOLS_TOOL = {
+  type: "function",
+  name: "use_new_tools",
+  description:
+    "Use this tool to get REAL-TIME, LIVE data. Call it automatically (without the user saying 'use new tools') whenever the user asks about: " +
+    "weather or forecast; news or headlines; current time or timezone; sports scores or standings; stock prices or market quotes; " +
+    "recipes or cooking; translating text or language; movies, TV shows, or what to watch. " +
+    "Also call it when the user explicitly says 'use new tools', 'try new tools', or 'use your other tools' — then pass the question they want re-answered. " +
+    "Pass the user's question exactly as they asked it. Do NOT answer from memory for these topics — always call this tool for live data.",
+  parameters: {
+    type: "object",
+    properties: {
+      question: {
+        type: "string",
+        description: "The user's question (e.g. 'What's the weather?', 'What time is it in Tokyo?', 'Any news?', 'How is Apple stock doing?').",
+      },
+    },
+    required: ["question"],
+  },
+};
+
 const STORE_MEMORY_TOOL = {
   type: "function",
   name: "store_memory",
@@ -182,12 +203,13 @@ export interface GrokRealtimeOptions {
   onSetVolume?: (volume: number, device: string) => Promise<string>;
   onPlayYouTube?: (query: string) => Promise<string>;
   onCloseVideo?: () => void;
+  onUseNewTools?: (question: string) => Promise<{ success: boolean; answer: string }>;
 }
 
 export async function startGrokRealtimeVoice(
   options: GrokRealtimeOptions
 ): Promise<() => void> {
-  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored, onPlayMusic, onPauseMusic, onSetVolume, onPlayYouTube, onCloseVideo } = options;
+  const { token, instructions, stream, apiBaseUrl, onTranscript, onError, onMemoryStored, onPlayMusic, onPauseMusic, onSetVolume, onPlayYouTube, onCloseVideo, onUseNewTools } = options;
   if (!token) {
     onError?.("No realtime token");
     return () => {};
@@ -292,6 +314,17 @@ export async function startGrokRealtimeVoice(
         respondToFunctionCall(callId, { success: true, message: "Returned to dashboard" });
         return;
       }
+
+      if (name === "use_new_tools") {
+        const question = parsed.question ?? "";
+        if (question && onUseNewTools) {
+          const result = await onUseNewTools(question);
+          respondToFunctionCall(callId, result);
+        } else {
+          respondToFunctionCall(callId, { success: false, answer: "External tools are not available right now." });
+        }
+        return;
+      }
     } catch {}
 
     respondToFunctionCall(callId, { success: false, error: "Unknown function" });
@@ -314,7 +347,7 @@ export async function startGrokRealtimeVoice(
           voice: "Ara",
           instructions,
           turn_detection: { type: "server_vad" },
-          tools: [STORE_MEMORY_TOOL, PLAY_MUSIC_TOOL, PAUSE_MUSIC_TOOL, SET_VOLUME_TOOL, PLAY_YOUTUBE_TOOL, CLOSE_VIDEO_TOOL],
+          tools: [STORE_MEMORY_TOOL, PLAY_MUSIC_TOOL, PAUSE_MUSIC_TOOL, SET_VOLUME_TOOL, PLAY_YOUTUBE_TOOL, CLOSE_VIDEO_TOOL, USE_NEW_TOOLS_TOOL],
           audio: {
             input: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },
             output: { format: { type: "audio/pcm", rate: SAMPLE_RATE } },

@@ -41,6 +41,7 @@ function buildVoiceInstructions(speakerId: SpeakerId, memories: string[]): strin
   base += " You have a store_memory tool — use it aggressively. ANY time a user shares personal information (names, preferences, facts about their life, pet names, family details, allergies, routines, languages, important dates) or says anything like 'remember', 'don't forget', 'I want you to know', 'I want to teach you', 'learn this', or corrects you about a fact — call store_memory immediately. When in doubt, store it. After storing, briefly confirm what you remembered.";
   base += " You have play_music, pause_music, and set_volume tools for Sonos. When the user asks to play something in a specific room (e.g. 'play Billie Ray Cyrus downstairs'), always call play_music with that room as the device — play only on that speaker. When the user asks to stop or pause music IN A SPECIFIC ROOM (e.g. 'stop the living room', 'turn off downstairs'), call pause_music with that room as the device. When the user says 'stop the music' or 'pause' WITHOUT naming a room, call pause_music with NO device — the system will check which speakers are playing and either stop all (if same music) or ask which to stop (if different music). IMPORTANT: Do NOT assume a room when the user doesn't say one. Default music: 'Latin indie' on Living Room. Available rooms: Living Room, Downstairs, Guest Bathroom, Master Bathroom.";
   base += " You have a play_youtube tool to show YouTube videos on screen. When the user wants to watch something, search YouTube and embed it for them. You also have a close_video tool — ALWAYS call close_video when the user wants to stop watching a video or go back. This includes 'stop', 'stop the video', 'go back', 'dashboard', 'done', 'close', 'exit', 'turn it off', or anything similar. If a video is playing and the user says 'stop', use close_video, NOT pause_music.";
+  base += " You have a use_new_tools tool that fetches live data from external APIs. Use it AUTOMATICALLY whenever the user asks about: weather or forecast, news or headlines, current time or timezone, sports scores, stock prices, recipes, translation, or movies/TV. You do NOT need the user to say 'use new tools' — just call use_new_tools with their question (e.g. 'What's the weather?', 'What time is it in Tokyo?'). Only answer from your own knowledge for topics that are NOT in that list (e.g. general knowledge, jokes, home control). Always read back the answer the tool returns.";
 
   if (memories.length > 0) {
     base += "\n\nThings you remember from past conversations:\n" + memories.map((m) => `- ${m}`).join("\n");
@@ -292,6 +293,19 @@ export function VoiceProvider({
         },
         onCloseVideo: () => {
           onCloseVideo?.();
+        },
+        onUseNewTools: async (question: string) => {
+          try {
+            const res = await fetch(`${apiBaseUrl}/rapid-api-query`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ question }),
+            });
+            const data = await res.json();
+            return { success: !!data.success, answer: data.answer || "I couldn't get an answer from external tools." };
+          } catch {
+            return { success: false, answer: "External tools are unavailable right now." };
+          }
         },
       })
     );
