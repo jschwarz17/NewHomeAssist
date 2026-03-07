@@ -33,32 +33,33 @@ interface Cache {
 let cache: Cache | null = null;
 const CACHE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-const SYSTEM_PROMPT = `You are a movie and TV show recommendation engine. Return ONLY valid JSON, no markdown fences, no explanation.
+const SYSTEM_PROMPT = `You are a movie and TV show recommendation engine. You have access to live web search — use it to find real, currently released or newly announced 2025 and 2026 movies and TV shows before responding.
+
+Return ONLY valid JSON, no markdown fences, no explanation.
 
 Return a JSON object with two arrays: "shows" (10 items) and "movies" (10 items).
 
-CRITICAL — ACCURACY RULES (read carefully before responding):
-- You MUST only recommend titles that you are 100% certain actually exist and have been publicly released or officially confirmed for release.
-- Do NOT invent, hallucinate, or speculate about titles. If you are even slightly unsure a title is real, omit it and pick something you are certain about.
-- Every title must be a real, verifiable movie or TV show that exists in databases like IMDB or TMDB.
-- Prefer well-known recent hits you have strong knowledge of over obscure or uncertain titles.
+SEARCH INSTRUCTIONS:
+- Search the web for "best new movies 2025 2026" and "best new TV shows 2025 2026" to find real, current titles.
+- Only include titles confirmed by your web search as actually existing and released (or officially releasing in 2025/2026).
+- Do NOT invent titles. Every title must be verifiable on IMDB or TMDB.
 
 CONTENT RULES:
-1. Prioritize titles from 2024 and 2025. You may include a small number of confirmed 2023 titles if needed to fill the list. Do NOT include titles whose release date you are uncertain about.
+1. Titles must be from 2025 or 2026 based on your live web search results.
 2. Primary genres: action, suspense, thriller, crime. Include exactly 2-3 comedy titles spread across shows and movies combined.
 3. All recommendations must be mainstream, broadly entertaining, and non-political. Avoid titles with heavy ideological messaging, social justice themes, or woke content. Focus on storytelling, tension, humor, and character.
-4. Prioritize titles currently available for streaming in the US.
+4. Prioritize titles currently available or coming to streaming in the US.
 5. Each item must have a "mood" tag — choose ONE from: "fun", "gritty", "quirky", "funny", "suspenseful".
    - fun: light, adventurous, crowd-pleasing action or comedy
    - gritty: dark, intense, realistic crime or thriller
    - quirky: offbeat, unconventional, stylized
    - funny: primarily comedy-driven
    - suspenseful: edge-of-seat tension, mystery, psychological
-6. Across the combined 20 titles, include exactly 3-4 international titles (non-English language originals). They must be real, confirmed releases you are certain about.
+6. Across the combined 20 titles, include exactly 3-4 international titles (non-English language originals) confirmed by your search.
 
 Each item must have exactly these fields:
 - title: string (exact official title as it appears on IMDB/TMDB)
-- year: string (confirmed release year, e.g. "2024" or "2025")
+- year: string (confirmed release year, e.g. "2025" or "2026")
 - type: "movie" or "show"
 - description: string (2-3 engaging sentences about the plot and why it is worth watching)
 - genre: string (e.g. "Action / Thriller")
@@ -83,32 +84,42 @@ export async function GET() {
   }
 
   try {
-    const res = await fetch("https://api.x.ai/v1/chat/completions", {
+    // Use the Responses API with web_search so Grok can look up real current titles
+    // (same capability as the Grok web app — no more hallucinated titles)
+    const res = await fetch("https://api.x.ai/v1/responses", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "grok-3-mini",
-        messages: [
+        model: "grok-4-1-fast",
+        tools: [{ type: "web_search" }],
+        input: [
           { role: "system", content: SYSTEM_PROMPT },
           {
             role: "user",
             content:
-              "Give me 10 TV show recommendations and 10 movie recommendations. Only include titles you are absolutely certain are real and exist.",
+              "Search the web for the best new movies and TV shows released in 2025 and 2026, then give me 10 TV show recommendations and 10 movie recommendations in the JSON format specified.",
           },
         ],
-        temperature: 0.5,
       }),
     });
 
     if (!res.ok) {
-      throw new Error(`Grok API error: ${res.status}`);
+      const errText = await res.text();
+      throw new Error(`Grok API error: ${res.status} — ${errText}`);
     }
 
     const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content ?? "";
+
+    // Responses API returns output as an array; find the assistant message
+    type OutputItem = { type: string; content?: { type: string; text: string }[] };
+    const messageItem = (data.output as OutputItem[] | undefined)
+      ?.find((o) => o.type === "message");
+    const raw =
+      messageItem?.content?.find((c) => c.type === "output_text")?.text ?? "";
+
     const jsonStr = raw
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
