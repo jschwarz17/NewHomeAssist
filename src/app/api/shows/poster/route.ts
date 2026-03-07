@@ -132,6 +132,10 @@ export async function GET(req: NextRequest) {
   const tmdbKey = process.env.TMDB_API_KEY;
   const rapidKey = process.env.RAPID_API_KEY;
 
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'poster/route.ts:entry',message:'Poster request received',data:{query,type,year,hasTmdbKey:!!tmdbKey,hasRapidKey:!!rapidKey},timestamp:Date.now(),hypothesisId:'H-A,H-B'})}).catch(()=>{});
+  // #endregion
+
   if (!query || (!tmdbKey && !rapidKey)) {
     return NextResponse.json({ poster: null });
   }
@@ -146,15 +150,28 @@ export async function GET(req: NextRequest) {
   try {
     if (tmdbKey) {
       poster = await fetchFromTmdb(query, type, year, tmdbKey);
+      // #region agent log
+      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'poster/route.ts:after-tmdb',message:'TMDB result',data:{query,posterFound:!!poster,posterUrl:poster},timestamp:Date.now(),hypothesisId:'H-A,H-C'})}).catch(()=>{});
+      // #endregion
     }
 
     // Fallback to RapidAPI if TMDB didn't return anything
     if (!poster && rapidKey) {
       poster = await fetchFromRapidApi(query, type, year, rapidKey);
+      // #region agent log
+      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'poster/route.ts:after-rapidapi',message:'RapidAPI fallback result',data:{query,posterFound:!!poster,posterUrl:poster},timestamp:Date.now(),hypothesisId:'H-A,H-C'})}).catch(()=>{});
+      // #endregion
     }
   } catch (err) {
     console.error("[poster] fetch error:", err);
+    // #region agent log
+    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'poster/route.ts:error',message:'Poster fetch threw',data:{query,error:String(err)},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+    // #endregion
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'poster/route.ts:final',message:'Final poster result',data:{query,type,year,poster},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{});
+  // #endregion
 
   posterCache.set(cacheKey, poster);
   return NextResponse.json({ poster });
