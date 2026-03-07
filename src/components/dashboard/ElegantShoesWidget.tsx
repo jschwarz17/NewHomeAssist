@@ -12,26 +12,40 @@ function getWidgetsBase(): string {
 
 const FALLBACK_IMAGES: Shoe[] = [
   { imageUrl: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=200&h=200&fit=crop&q=80", link: "https://unsplash.com/s/photos/elegant-women-shoes", label: "Classic heels" },
-  { imageUrl: "https://images.unsplash.com/photo-1535043934128-cf0b31cfbaa7?w=200&h=200&fit=crop&q=80", link: "https://unsplash.com/s/photos/elegant-women-shoes", label: "Leather boots" },
+  { imageUrl: "https://images.unsplash.com/photo-1605812860427-4024433a70fd?w=200&h=200&fit=crop&q=80", link: "https://unsplash.com/s/photos/leather-boots", label: "Leather boots" },
   { imageUrl: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=200&h=200&fit=crop&q=80", link: "https://unsplash.com/s/photos/elegant-women-shoes", label: "Sneakers" },
 ];
 
-function ShoeImage({ shoe }: { shoe: Shoe }) {
-  const [broken, setBroken] = useState(false);
+// Secondary fallback URLs tried if the primary fails
+const RESERVE_URLS: Record<string, string> = {
+  "Leather boots": "https://images.unsplash.com/photo-1539185441755-769473a23570?w=200&h=200&fit=crop&q=80",
+  "Classic heels": "https://images.unsplash.com/photo-1515347619252-60a4bf4fff4f?w=200&h=200&fit=crop&q=80",
+  "Sneakers": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop&q=80",
+};
 
-  if (broken) {
+function ShoeImage({ shoe }: { shoe: Shoe }) {
+  const [attempt, setAttempt] = useState(0);
+
+  const currentSrc =
+    attempt === 0
+      ? shoe.imageUrl
+      : attempt === 1 && shoe.label && RESERVE_URLS[shoe.label]
+      ? RESERVE_URLS[shoe.label]
+      : null;
+
+  if (currentSrc === null) {
     return (
       <div className="w-20 h-20 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-        <span className="text-zinc-600 text-[10px]">No image</span>
+        <span className="text-zinc-600 text-lg">👟</span>
       </div>
     );
   }
 
   return (
     <img
-      src={shoe.imageUrl}
+      src={currentSrc}
       alt={shoe.label ?? "Shoe"}
-      onError={() => setBroken(true)}
+      onError={() => setAttempt((n) => n + 1)}
       className="w-20 h-20 rounded object-cover border border-zinc-800 hover:border-zinc-600 transition-colors"
     />
   );

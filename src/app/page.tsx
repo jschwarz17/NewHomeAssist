@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { VoicePanel } from "@/components/VoicePanel";
 import { FintechNewsWidget } from "@/components/dashboard/FintechNewsWidget";
 import { IndieRockNewsWidget } from "@/components/dashboard/IndieRockNewsWidget";
@@ -36,8 +37,14 @@ export default function HomePage() {
           <ElegantShoesWidget />
         </section>
 
-        {/* RIGHT: Voice */}
-        <section className="flex flex-col min-h-0">
+        {/* RIGHT: Quick nav + Voice */}
+        <section className="flex flex-col min-h-0 gap-2">
+          <Link
+            href="/shows"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center block leading-tight"
+          >
+            🎬 Movies &amp; Shows
+          </Link>
           <VoicePanel />
         </section>
       </div>

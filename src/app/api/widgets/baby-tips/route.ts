@@ -18,6 +18,11 @@ const NEGATIVE_KEYWORDS = [
   "abuse", "neglect", "lawsuit", "recall", "warning", "danger",
   "crisis", "epidemic", "famine", "drought", "war", "conflict",
   "poverty", "malnutrition", "starv", "disease outbreak",
+  // political / immigration / enforcement — must never appear in baby tips
+  "ice ", "i.c.e", "immigration", "deport", "border patrol", "enforcement",
+  "legislation", "congress", "senate", "government", "policy", "political",
+  "trump", "biden", "administration", "executive order", "federal agency",
+  "raid", "arrest", "law enforcement", "police",
 ];
 
 function isPositiveArticle(article: { title?: string; description?: string }): boolean {
