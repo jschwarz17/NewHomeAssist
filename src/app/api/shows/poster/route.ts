@@ -2,12 +2,62 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const RAPIDAPI_HOST = "moviesdatabase.p.rapidapi.com";
-
-// Server-side poster cache: key → posterUrl | null
+// Server-side poster cache: cacheKey → posterUrl | null
 const posterCache = new Map<string, string | null>();
 
-async function searchPosters(
+// ── TMDB ──────────────────────────────────────────────────────────────────────
+
+const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
+
+async function fetchFromTmdb(
+  query: string,
+  type: string,
+  year: string | undefined,
+  apiKey: string
+): Promise<string | null> {
+  const isMovie = type === "movie";
+  const endpoint = isMovie ? "search/movie" : "search/tv";
+  const yearParam = isMovie
+    ? year ? `&year=${year}` : ""
+    : year ? `&first_air_date_year=${year}` : "";
+
+  const url = `https://api.themoviedb.org/3/${endpoint}?api_key=${apiKey}&query=${encodeURIComponent(query)}&include_adult=false${yearParam}`;
+
+  const res = await fetch(url);
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const results: { poster_path?: string | null; release_date?: string; first_air_date?: string }[] =
+    data.results ?? [];
+
+  // Pick the result with a poster, preferring the year closest to the target
+  const withPosters = results.filter((r) => r.poster_path);
+  if (!withPosters.length) {
+    // Retry without year restriction if we got nothing
+    if (year) return fetchFromTmdb(query, type, undefined, apiKey);
+    return null;
+  }
+
+  if (year) {
+    const target = parseInt(year, 10);
+    withPosters.sort((a, b) => {
+      const dateA = isMovie ? a.release_date : a.first_air_date;
+      const dateB = isMovie ? b.release_date : b.first_air_date;
+      const ya = dateA ? Math.abs(parseInt(dateA.slice(0, 4), 10) - target) : 999;
+      const yb = dateB ? Math.abs(parseInt(dateB.slice(0, 4), 10) - target) : 999;
+      return ya - yb;
+    });
+  }
+
+  const poster = withPosters[0].poster_path!;
+  return `${TMDB_IMAGE_BASE}${poster}`;
+}
+
+// ── RapidAPI Movies Database (fallback) ───────────────────────────────────────
+
+const RAPIDAPI_HOST = "moviesdatabase.p.rapidapi.com";
+
+async function searchRapidApi(
   query: string,
   titleType: string | null,
   rapidKey: string
@@ -19,7 +69,6 @@ async function searchPosters(
   });
 
   const url = `https://${RAPIDAPI_HOST}/titles/search/title/${encodeURIComponent(query)}?${params}`;
-
   const res = await fetch(url, {
     headers: {
       "X-RapidAPI-Key": rapidKey,
@@ -30,9 +79,7 @@ async function searchPosters(
   if (!res.ok) return [];
 
   const data = await res.json();
-  const results: { url: string | null; year: string | null }[] = (
-    data.results ?? []
-  ).map((r: Record<string, unknown>) => {
+  return (data.results ?? []).map((r: Record<string, unknown>) => {
     const img = r.primaryImage as Record<string, unknown> | undefined;
     const releaseYear = r.releaseYear as Record<string, unknown> | undefined;
     return {
@@ -40,20 +87,27 @@ async function searchPosters(
       year: releaseYear?.year != null ? String(releaseYear.year) : null,
     };
   });
-
-  return results;
 }
 
-function pickBestPoster(
-  results: { url: string | null; year: string | null }[],
-  targetYear?: string
-): string | null {
+async function fetchFromRapidApi(
+  query: string,
+  type: string,
+  year: string | undefined,
+  rapidKey: string
+): Promise<string | null> {
+  const titleType = type === "movie" ? "movie" : "tvSeries";
+
+  let results = await searchRapidApi(query, titleType, rapidKey);
+  // Fallback: no titleType filter
+  if (!results.some((r) => r.url)) {
+    results = await searchRapidApi(query, null, rapidKey);
+  }
+
   const withPosters = results.filter((r) => r.url);
   if (!withPosters.length) return null;
 
-  if (targetYear) {
-    const target = parseInt(targetYear, 10);
-    // Sort by closeness to target year, favouring exact matches
+  if (year) {
+    const target = parseInt(year, 10);
     withPosters.sort((a, b) => {
       const da = a.year ? Math.abs(parseInt(a.year, 10) - target) : 999;
       const db = b.year ? Math.abs(parseInt(b.year, 10) - target) : 999;
@@ -64,50 +118,44 @@ function pickBestPoster(
   return withPosters[0].url!;
 }
 
+// ── Route handler ─────────────────────────────────────────────────────────────
+
 /**
- * GET /api/shows/poster?query=Reacher&type=show&year=2025
+ * GET /api/shows/poster?query=Reacher&type=show&year=2024
+ *
+ * Tries TMDB first (TMDB_API_KEY), falls back to RapidAPI Movies Database.
  */
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get("query");
-  const type = req.nextUrl.searchParams.get("type"); // "movie" | "show"
+  const type = req.nextUrl.searchParams.get("type") ?? "movie";
   const year = req.nextUrl.searchParams.get("year") ?? undefined;
+  const tmdbKey = process.env.TMDB_API_KEY;
   const rapidKey = process.env.RAPID_API_KEY;
 
-  if (!query || !rapidKey) {
+  if (!query || (!tmdbKey && !rapidKey)) {
     return NextResponse.json({ poster: null });
   }
 
-  const cacheKey = `${type}:${query}`;
+  const cacheKey = `${type}:${query}:${year ?? ""}`;
   if (posterCache.has(cacheKey)) {
     return NextResponse.json({ poster: posterCache.get(cacheKey) ?? null });
   }
 
+  let poster: string | null = null;
+
   try {
-    const titleType = type === "movie" ? "movie" : "tvSeries";
-
-    // Primary attempt: with titleType filter
-    let results = await searchPosters(query, titleType, rapidKey);
-    let poster = pickBestPoster(results, year);
-
-    // Fallback 1: drop the titleType restriction
-    if (!poster) {
-      results = await searchPosters(query, null, rapidKey);
-      poster = pickBestPoster(results, year);
+    if (tmdbKey) {
+      poster = await fetchFromTmdb(query, type, year, tmdbKey);
     }
 
-    // Fallback 2: try just the first word(s) of the title if it's multi-word
-    if (!poster) {
-      const shortQuery = query.split(/\s+/).slice(0, 2).join(" ");
-      if (shortQuery !== query) {
-        results = await searchPosters(shortQuery, titleType, rapidKey);
-        poster = pickBestPoster(results, year);
-      }
+    // Fallback to RapidAPI if TMDB didn't return anything
+    if (!poster && rapidKey) {
+      poster = await fetchFromRapidApi(query, type, year, rapidKey);
     }
-
-    posterCache.set(cacheKey, poster);
-    return NextResponse.json({ poster });
-  } catch {
-    posterCache.set(cacheKey, null);
-    return NextResponse.json({ poster: null });
+  } catch (err) {
+    console.error("[poster] fetch error:", err);
   }
+
+  posterCache.set(cacheKey, poster);
+  return NextResponse.json({ poster });
 }

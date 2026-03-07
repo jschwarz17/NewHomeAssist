@@ -19,7 +19,7 @@ export interface ShowItem {
   country: string;
   language: string;
   streamingService: string;
-  posterSearchQuery: string;
+  tmdbSearchTitle: string;
   trailerSearchQuery: string;
   mood: ShowMood;
 }
@@ -46,7 +46,7 @@ interface LocalCacheEntry {
   cachedAt: number;
 }
 
-const CACHE_KEY = "shows_cache_v2";
+const CACHE_KEY = "shows_cache_v3";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ShowsContext = createContext<ShowsContextValue | null>(null);
@@ -106,10 +106,11 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       base: string
     ) => {
       items.forEach((item) => {
+        const searchTitle = item.tmdbSearchTitle || item.title;
         const yearParam = item.year ? `&year=${encodeURIComponent(item.year)}` : "";
         const url = base
-          ? `${base}/api/shows/poster/?query=${encodeURIComponent(item.posterSearchQuery)}&type=${item.type}${yearParam}`
-          : `/api/shows/poster?query=${encodeURIComponent(item.posterSearchQuery)}&type=${item.type}${yearParam}`;
+          ? `${base}/api/shows/poster/?query=${encodeURIComponent(searchTitle)}&type=${item.type}${yearParam}`
+          : `/api/shows/poster?query=${encodeURIComponent(searchTitle)}&type=${item.type}${yearParam}`;
 
         fetch(url)
           .then((r) => (r.ok ? r.json() : { poster: null }))
