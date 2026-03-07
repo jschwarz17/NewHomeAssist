@@ -295,15 +295,27 @@ export function VoiceProvider({
           onCloseVideo?.();
         },
         onUseNewTools: async (question: string) => {
+          // #region agent log
+          const callUrl = `${apiBaseUrl}/rapid-api-query`;
+          console.error(`[ARA-DEBUG][B] onUseNewTools callback fired question="${question}" url=${callUrl}`);
+          fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a6b4'},body:JSON.stringify({sessionId:'95a6b4',hypothesisId:'B',location:'VoiceProvider.tsx:onUseNewTools',message:'callback fired',data:{question,callUrl},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           try {
-            const res = await fetch(`${apiBaseUrl}/rapid-api-query`, {
+            const res = await fetch(callUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ question }),
             });
             const data = await res.json();
+            // #region agent log
+            console.error(`[ARA-DEBUG][B] rapid-api-query response status=${res.status} data=${JSON.stringify(data).slice(0,300)}`);
+            fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a6b4'},body:JSON.stringify({sessionId:'95a6b4',hypothesisId:'B',location:'VoiceProvider.tsx:onUseNewTools_response',message:'api response',data:{status:res.status,result:data},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             return { success: !!data.success, answer: data.answer || "I couldn't get an answer from external tools." };
-          } catch {
+          } catch (err) {
+            // #region agent log
+            console.error(`[ARA-DEBUG][B] onUseNewTools fetch threw err=${String(err)}`);
+            // #endregion
             return { success: false, answer: "External tools are unavailable right now." };
           }
         },

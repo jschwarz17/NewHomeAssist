@@ -50,6 +50,9 @@ If the data is unclear or empty, say you couldn't find the answer.`;
 export async function POST(req: NextRequest) {
   try {
     const { question } = await req.json();
+    // #region agent log
+    console.log(`[ARA-DEBUG][C] rapid-api-query received question="${question}"`);
+    // #endregion
     if (!question || typeof question !== "string") {
       return NextResponse.json({ success: false, error: "Missing question" }, { status: 400 });
     }
@@ -102,6 +105,9 @@ export async function POST(req: NextRequest) {
       error?: string;
     };
 
+    // #region agent log
+    console.log(`[ARA-DEBUG][C] Claude router response="${routerText.slice(0,400)}"`);
+    // #endregion
     try {
       routing = JSON.parse(routerText);
     } catch {
@@ -145,6 +151,9 @@ export async function POST(req: NextRequest) {
       apiResponse = await fetch(url, { method: "POST", headers, body });
     }
 
+    // #region agent log
+    console.log(`[ARA-DEBUG][D] RapidAPI call status=${apiResponse.status} slug=${routing.service_slug} url=${routing.base_url}${routing.endpoint_path}`);
+    // #endregion
     if (!apiResponse.ok) {
       const errText = await apiResponse.text().catch(() => "");
       console.error(`[rapid-api-query] API ${apiResponse.status}:`, errText.slice(0, 500));
