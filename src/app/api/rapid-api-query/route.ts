@@ -189,7 +189,8 @@ const DIRECT_ROUTES: DirectRoute[] = [
     match: /\btime\b|what time|current time|clock/i,
     build: (q) => {
       const city = extractCityForTime(q);
-      return { endpoint: "/v1/worldtime", method: "GET", params: city ? { city } : { timezone: DEFAULT_TIMEZONE } };
+      const params: Record<string, string> = city ? { city } : { timezone: DEFAULT_TIMEZONE };
+      return { endpoint: "/v1/worldtime", method: "GET", params };
     },
     format: formatTime,
   },
