@@ -67,18 +67,57 @@ function extractMovieQuery(q: string): string {
   return m ? m[1].trim() : "";
 }
 
+// ─── WMO weather code → human-readable description ─────────────────────────
+
+const WMO_CODES: Record<number, string> = {
+  0: "clear sky", 1: "mainly clear", 2: "partly cloudy", 3: "overcast",
+  45: "foggy", 48: "icy fog",
+  51: "light drizzle", 53: "drizzle", 55: "heavy drizzle",
+  61: "light rain", 63: "rain", 65: "heavy rain",
+  71: "light snow", 73: "snow", 75: "heavy snow", 77: "snow grains",
+  80: "rain showers", 81: "rain showers", 82: "heavy rain showers",
+  85: "snow showers", 86: "heavy snow showers",
+  95: "thunderstorm", 96: "thunderstorm with hail", 99: "thunderstorm with hail",
+};
+
+// ─── Open-Meteo weather fetch (free, no key needed) ──────────────────────────
+
+async function callOpenMeteoWeather(location: string): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+  try {
+    // Step 1: geocode
+    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
+    const geoResp = await fetch(geoUrl);
+    if (!geoResp.ok) return { ok: false, error: `Geocoding failed: ${geoResp.status}` };
+    const geoData = await geoResp.json() as { results?: { latitude: number; longitude: number; name: string; admin1?: string; country?: string }[] };
+    const place = geoData?.results?.[0];
+    if (!place) return { ok: false, error: `Location not found: ${location}` };
+
+    // Step 2: fetch weather
+    const wxUrl = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`;
+    const wxResp = await fetch(wxUrl);
+    if (!wxResp.ok) return { ok: false, error: `Weather fetch failed: ${wxResp.status}` };
+    const wxData = await wxResp.json();
+    return { ok: true, data: { ...wxData, _location: place } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // ─── Inline response formatters (no Claude needed for known services) ──────
 
 function formatWeather(d: unknown): string | null {
-  const data = d as { current?: { temp_f?: number; feelslike_f?: number; condition?: { text?: string } }; location?: { name?: string } };
+  const data = d as {
+    current?: { temperature_2m?: number; apparent_temperature?: number; weathercode?: number };
+    _location?: { name?: string; admin1?: string };
+  };
   const c = data?.current;
-  const loc = data?.location?.name ?? "Park Slope";
   if (!c) return null;
-  const temp = c.temp_f !== undefined ? `${Math.round(c.temp_f)}°F` : null;
-  const feels = c.feelslike_f !== undefined ? `, feels like ${Math.round(c.feelslike_f)}°F` : "";
-  const cond = c.condition?.text ?? "";
-  if (temp && cond) return `It's ${temp}${feels} and ${cond.toLowerCase()} in ${loc}.`;
-  if (temp) return `It's ${temp} in ${loc}.`;
+  const temp = c.temperature_2m !== undefined ? `${Math.round(c.temperature_2m)}°F` : null;
+  const feels = c.apparent_temperature !== undefined ? `, feels like ${Math.round(c.apparent_temperature)}°F` : "";
+  const cond = c.weathercode !== undefined ? (WMO_CODES[c.weathercode] ?? "") : "";
+  const locName = data?._location?.name ?? "your area";
+  if (temp && cond) return `It's ${temp}${feels} and ${cond} in ${locName}.`;
+  if (temp) return `It's ${temp}${feels} in ${locName}.`;
   return null;
 }
 
@@ -169,17 +208,20 @@ interface DirectRoute {
   rapidapi_host: string;
   base_url: string;
   match: RegExp;
+  /** If present, completely replaces the RapidAPI call. Receives the raw question. */
+  callFn?: (q: string) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
   build: (q: string) => { endpoint: string; method: string; params: Record<string, string> };
   format: (data: unknown) => string | null;
 }
 
 const DIRECT_ROUTES: DirectRoute[] = [
   {
-    slug: "weatherapi",
-    rapidapi_host: "weatherapi-com.p.rapidapi.com",
-    base_url: "https://weatherapi-com.p.rapidapi.com",
+    slug: "open-meteo-weather",
+    rapidapi_host: "",
+    base_url: "",
     match: /weather|forecast|temperature|raining|rain|hot outside|cold outside|sunny|cloudy|humid|snow|wind/i,
-    build: (q) => ({ endpoint: "/current.json", method: "GET", params: { q: extractLocation(q) || DEFAULT_LOCATION } }),
+    callFn: (q) => callOpenMeteoWeather(extractLocation(q) || DEFAULT_LOCATION),
+    build: () => ({ endpoint: "", method: "GET", params: {} }),
     format: formatWeather,
   },
   {
@@ -354,8 +396,13 @@ export async function POST(req: NextRequest) {
       // #region agent log
       console.log(`[ARA-DEBUG][C] direct route matched slug=${directRoute.slug}`);
       // #endregion
-      const { endpoint, method, params } = directRoute.build(question);
-      const result = await callRapidApi(rapidKey, directRoute.rapidapi_host, directRoute.base_url, endpoint, method, params);
+      let result: { ok: boolean; data?: unknown; error?: string };
+      if (directRoute.callFn) {
+        result = await directRoute.callFn(question);
+      } else {
+        const { endpoint, method, params } = directRoute.build(question);
+        result = await callRapidApi(rapidKey, directRoute.rapidapi_host, directRoute.base_url, endpoint, method, params);
+      }
 
       // #region agent log
       console.log(`[ARA-DEBUG][D] RapidAPI result ok=${result.ok} slug=${directRoute.slug} error=${result.error ?? "none"}`);
