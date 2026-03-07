@@ -356,7 +356,7 @@ export function VoiceProvider({
             }
             if (task === "sonos_play" && sonos) {
               const [query, device] = value.includes("|")
-                ? value.split("|").map((s) => s.trim())
+                ? value.split("|").map((s: string) => s.trim())
                 : [value || "Latin indie", "living room"];
               try {
                 if (spotify?.isLoggedIn?.()) {
