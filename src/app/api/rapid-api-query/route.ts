@@ -232,8 +232,9 @@ const DIRECT_ROUTES: DirectRoute[] = [
     match: /movie|film|watch|streaming|netflix|hulu|disney|trending|tv show|series|what.*watch/i,
     build: (q) => {
       const query = extractMovieQuery(q);
-      if (query) return { endpoint: "/imdb/search", method: "GET", params: { query, rows: "5" } };
-      return { endpoint: "/imdb/most-popular-movies", method: "GET", params: {} };
+      const params: Record<string, string> = query ? { query, rows: "5" } : {};
+      const endpoint = query ? "/imdb/search" : "/imdb/most-popular-movies";
+      return { endpoint, method: "GET", params };
     },
     format: formatMovies,
   },
