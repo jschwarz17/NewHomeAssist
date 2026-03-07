@@ -296,7 +296,7 @@ export function VoiceProvider({
         },
         onUseNewTools: async (question: string) => {
           // #region agent log
-          const callUrl = `${apiBaseUrl}/rapid-api-query`;
+          const callUrl = `${apiBaseUrl}/rapid-api-query/`;
           console.error(`[ARA-DEBUG][B] onUseNewTools callback fired question="${question}" url=${callUrl}`);
           fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a6b4'},body:JSON.stringify({sessionId:'95a6b4',hypothesisId:'B',location:'VoiceProvider.tsx:onUseNewTools',message:'callback fired',data:{question,callUrl},timestamp:Date.now()})}).catch(()=>{});
           // #endregion
