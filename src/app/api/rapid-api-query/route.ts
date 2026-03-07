@@ -192,9 +192,12 @@ export async function POST(req: NextRequest) {
       service_used: routing.service_slug,
     });
   } catch (err) {
-    console.error("[rapid-api-query] Error:", err);
+    // #region agent log
+    const errMsg = err instanceof Error ? `${err.message}\n${err.stack?.slice(0,400)}` : String(err);
+    console.error("[rapid-api-query] Error:", errMsg);
+    // #endregion
     return NextResponse.json(
-      { success: false, error: "Internal error processing your request" },
+      { success: false, error: errMsg },
       { status: 500 }
     );
   }
