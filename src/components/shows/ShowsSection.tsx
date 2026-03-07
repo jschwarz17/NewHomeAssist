@@ -6,6 +6,8 @@ import type { ShowCardProps } from "./ShowCard";
 export interface ShowsSectionItem
   extends Omit<ShowCardProps, "isSelected" | "onSelect" | "onPlayTrailer" | "isLoadingTrailer"> {
   id: string;
+  posterSearchQuery: string;
+  trailerSearchQuery: string;
 }
 
 interface ShowsSectionProps {
