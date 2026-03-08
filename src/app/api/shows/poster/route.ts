@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 // Server-side poster cache: cacheKey → posterUrl | null
 const posterCache = new Map<string, string | null>();
 
-// ── TMDB ──────────────────────────────────────────────────────────────────────
+// ── TMDB (direct, if key is available) ────────────────────────────────────────
 
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
 
@@ -30,10 +30,8 @@ async function fetchFromTmdb(
   const results: { poster_path?: string | null; release_date?: string; first_air_date?: string }[] =
     data.results ?? [];
 
-  // Pick the result with a poster, preferring the year closest to the target
   const withPosters = results.filter((r) => r.poster_path);
   if (!withPosters.length) {
-    // Retry without year restriction if we got nothing
     if (year) return fetchFromTmdb(query, type, undefined, apiKey);
     return null;
   }
@@ -53,7 +51,48 @@ async function fetchFromTmdb(
   return `${TMDB_IMAGE_BASE}${poster}`;
 }
 
-// ── RapidAPI Movies Database (fallback) ───────────────────────────────────────
+// ── Streaming Availability API (RapidAPI) — stable CDN posters ────────────────
+
+async function fetchFromStreamingAvailability(
+  query: string,
+  type: string,
+  year: string | undefined,
+  rapidKey: string
+): Promise<string | null> {
+  const showType = type === "movie" ? "movie" : "series";
+  const params = new URLSearchParams({ title: query, country: "us", show_type: showType, output_language: "en" });
+  const url = `https://streaming-availability.p.rapidapi.com/shows/search/title?${params}`;
+
+  const res = await fetch(url, {
+    headers: {
+      "X-RapidAPI-Key": rapidKey,
+      "X-RapidAPI-Host": "streaming-availability.p.rapidapi.com",
+    },
+  });
+
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const shows: { title?: string; releaseYear?: number; firstAirYear?: number; imageSet?: { verticalPoster?: { w480?: string; w360?: string } } }[] =
+    Array.isArray(data) ? data : (data.shows ?? []);
+
+  if (!shows.length) return null;
+
+  // Pick best match by year if available
+  let best = shows[0];
+  if (year && shows.length > 1) {
+    const target = parseInt(year, 10);
+    best = shows.reduce((acc, cur) => {
+      const accYear = acc.releaseYear ?? acc.firstAirYear ?? 0;
+      const curYear = cur.releaseYear ?? cur.firstAirYear ?? 0;
+      return Math.abs(curYear - target) < Math.abs(accYear - target) ? cur : acc;
+    });
+  }
+
+  return best.imageSet?.verticalPoster?.w480 ?? best.imageSet?.verticalPoster?.w360 ?? null;
+}
+
+// ── RapidAPI Movies Database (last-resort fallback) ───────────────────────────
 
 const RAPIDAPI_HOST = "moviesdatabase.p.rapidapi.com";
 
@@ -123,7 +162,8 @@ async function fetchFromRapidApi(
 /**
  * GET /api/shows/poster?query=Reacher&type=show&year=2024
  *
- * Tries TMDB first (TMDB_API_KEY), falls back to RapidAPI Movies Database.
+ * Priority: TMDB (TMDB_API_KEY) → Streaming Availability API (RAPID_API_KEY)
+ *           → Movies Database API (RAPID_API_KEY)
  */
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get("query");
@@ -144,11 +184,18 @@ export async function GET(req: NextRequest) {
   let poster: string | null = null;
 
   try {
+    // 1. TMDB direct (most reliable, requires TMDB_API_KEY)
     if (tmdbKey) {
       poster = await fetchFromTmdb(query, type, year, tmdbKey);
     }
 
-    // Fallback to RapidAPI if TMDB didn't return anything
+    // 2. Streaming Availability API — stable CDN URLs, uses RAPID_API_KEY
+    //    Subscribe free at: https://rapidapi.com/movie-of-the-night-movie-of-the-night-default/api/streaming-availability
+    if (!poster && rapidKey) {
+      poster = await fetchFromStreamingAvailability(query, type, year, rapidKey);
+    }
+
+    // 3. Movies Database — last resort (IMDB URLs, occasionally unreliable)
     if (!poster && rapidKey) {
       poster = await fetchFromRapidApi(query, type, year, rapidKey);
     }
