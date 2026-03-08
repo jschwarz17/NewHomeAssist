@@ -119,7 +119,7 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       ? `${base}/api/shows/recommendations/`
       : "/api/shows/recommendations";
 
-    fetch(url)
+    fetch(url, { cache: "no-store" })
       .then((r) =>
         r.ok
           ? r.json()

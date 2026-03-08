@@ -105,12 +105,24 @@ export default function ShowsPage() {
         {error ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-center">
             <p className="text-zinc-400 text-sm">{error}</p>
-            <button
-              onClick={refresh}
-              className="mt-3 text-xs text-zinc-500 underline"
-            >
-              Retry
-            </button>
+            <div className="mt-3 flex flex-col items-center gap-2">
+              <button
+                onClick={refresh}
+                className="text-xs text-zinc-500 underline hover:text-zinc-400"
+              >
+                Retry
+              </button>
+              {process.env.NEXT_PUBLIC_REFRESH_KEY && (
+                <a
+                  href={`/api/cron/warm-shows?key=${process.env.NEXT_PUBLIC_REFRESH_KEY}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-zinc-500 underline hover:text-zinc-400"
+                >
+                  Pre-load now (opens in new tab, takes 1–2 min)
+                </a>
+              )}
+            </div>
           </div>
         ) : (
           <>
