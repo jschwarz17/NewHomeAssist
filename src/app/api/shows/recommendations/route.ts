@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getShowsCache, setShowsCache } from "@/lib/shows-cache";
+import { fetchRecommendationsFromGrok, type ShowItem } from "@/lib/shows-recommendations-grok";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -9,78 +11,28 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-export type ShowMood = "fun" | "gritty" | "quirky" | "funny" | "suspenseful";
-
-export interface ShowItem {
-  title: string;
-  year: string;
-  type: "movie" | "show";
-  description: string;
-  genre: string;
-  country: string;
-  language: string;
-  streamingService: string;
-  tmdbSearchTitle: string;
-  trailerSearchQuery: string;
-  mood: ShowMood;
-}
-
-interface Cache {
-  shows: ShowItem[];
-  movies: ShowItem[];
-  cachedAt: number;
-  version: number;
-}
-
-let cache: Cache | null = null;
-// Increment this version to force-bust the in-memory cache after a prompt change
-const CACHE_VERSION = 3;
-const CACHE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-const SYSTEM_PROMPT = `You are a movie and TV show recommendation engine. You have access to live web search — use it to find real, currently available 2025 and 2026 movies and TV shows before responding.
-
-Return ONLY valid JSON, no markdown fences, no explanation.
-
-Return a JSON object with two arrays: "shows" (10 items) and "movies" (10 items).
-
-SEARCH INSTRUCTIONS:
-- Search the web for "best new movies streaming now 2025" and "best new TV shows streaming now 2025 2026" to find real, current titles.
-- Also search "best European movies streaming 2025 2026" and "best European TV shows streaming 2025 2026" for the 5 required European titles.
-- ONLY include titles that are ALREADY RELEASED and CURRENTLY AVAILABLE to stream or watch RIGHT NOW (as of early 2026). Do NOT include titles that have not yet been released or are only announced/upcoming.
-- Do NOT invent titles. Every title must be verifiable on IMDB or TMDB and confirmed as already out.
-
-CONTENT RULES:
-1. Titles must ALREADY BE RELEASED and available to stream now. No upcoming, announced-only, or unreleased titles.
-2. Primary genres: action, suspense, thriller, crime. Include exactly 2-3 comedy titles spread across shows and movies combined.
-3. All recommendations must be mainstream, broadly entertaining, and non-political. Avoid titles with heavy ideological messaging, social justice themes, or woke content. Focus on storytelling, tension, humor, and character.
-4. Every title must be currently available on a named US streaming service (Netflix, Prime Video, Hulu, Disney+, Max, Paramount+, Peacock, Apple TV+) or currently in US theaters. Do NOT list a streaming service unless you have confirmed the title is available there right now.
-5. Each item must have a "mood" tag — choose ONE from: "fun", "gritty", "quirky", "funny", "suspenseful".
-   - fun: light, adventurous, crowd-pleasing action or comedy
-   - gritty: dark, intense, realistic crime or thriller
-   - quirky: offbeat, unconventional, stylized
-   - funny: primarily comedy-driven
-   - suspenseful: edge-of-seat tension, mystery, psychological
-6. Across the combined 20 titles, include exactly 5 European titles (non-English language originals from Europe — e.g. French, German, Spanish, Italian, Scandinavian, etc.). Spread them between shows and movies. Search specifically for "best European movies streaming 2025 2026" and "best European TV shows streaming 2025 2026" to find real confirmed titles. They must still meet all other rules (action/thriller/crime primary, non-woke, mood tag).
-
-Each item must have exactly these fields:
-- title: string (exact official title as it appears on IMDB/TMDB)
-- year: string (confirmed release year, e.g. "2025" or "2026")
-- type: "movie" or "show"
-- description: string (2-3 engaging sentences about the plot and why it is worth watching)
-- genre: string (e.g. "Action / Thriller")
-- country: string (country of origin, e.g. "USA", "South Korea", "France")
-- language: string (original language, e.g. "English", "Korean", "French")
-- streamingService: string (primary US streaming service, e.g. "Netflix", "Prime Video", "Hulu", "Disney+", "Max", "Paramount+", "Peacock", "Apple TV+", "Theaters")
-- tmdbSearchTitle: string (the exact title to search on TMDB — usually same as title, but use English title if known)
-- trailerSearchQuery: string (YouTube search query for the official trailer, e.g. "Warfare 2025 Official Trailer")
-- mood: string (one of: "fun", "gritty", "quirky", "funny", "suspenseful")`;
+// Re-export for consumers that import from the route
+export type { ShowItem } from "@/lib/shows-recommendations-grok";
+export type { ShowMood } from "@/lib/shows-recommendations-grok";
 
 export async function GET() {
-  if (cache && cache.version === CACHE_VERSION && Date.now() - cache.cachedAt < CACHE_MS) {
-    return NextResponse.json(cache, { headers: CORS_HEADERS });
+  const apiKey = process.env.XAI_API_KEY;
+
+  // 1. Prefer persistent cache (filled by 6am cron or a previous request)
+  const cached = await getShowsCache();
+  if (cached && cached.shows.length > 0) {
+    return NextResponse.json(
+      {
+        shows: cached.shows as ShowItem[],
+        movies: cached.movies as ShowItem[],
+        cachedAt: cached.cachedAt,
+        version: cached.version,
+      },
+      { headers: CORS_HEADERS }
+    );
   }
 
-  const apiKey = process.env.XAI_API_KEY;
+  // 2. No cache or stale: call Grok (e.g. first request of the day before cron, or no Postgres)
   if (!apiKey) {
     return NextResponse.json(
       { error: "XAI_API_KEY not configured" },
@@ -89,58 +41,14 @@ export async function GET() {
   }
 
   try {
-    // Use the Responses API with web_search so Grok can look up real current titles
-    // (same capability as the Grok web app — no more hallucinated titles)
-    const res = await fetch("https://api.x.ai/v1/responses", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "grok-4-1-fast",
-        tools: [{ type: "web_search" }],
-        input: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content:
-              "Search the web for the best movies and TV shows that are CURRENTLY STREAMING NOW in early 2026 (already released, not upcoming), then give me 10 TV show recommendations and 10 movie recommendations in the JSON format specified. Only include titles you can confirm are already out and available to watch.",
-          },
-        ],
-      }),
+    const result = await fetchRecommendationsFromGrok(apiKey);
+    await setShowsCache({
+      shows: result.shows,
+      movies: result.movies,
+      cachedAt: result.cachedAt,
+      version: result.version,
     });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Grok API error: ${res.status} — ${errText}`);
-    }
-
-    const data = await res.json();
-
-    // Responses API returns output as an array; find the assistant message
-    type OutputItem = { type: string; content?: { type: string; text: string }[] };
-    const messageItem = (data.output as OutputItem[] | undefined)
-      ?.find((o) => o.type === "message");
-    const raw =
-      messageItem?.content?.find((c) => c.type === "output_text")?.text ?? "";
-
-    const jsonStr = raw
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-
-    const parsed = JSON.parse(jsonStr);
-
-    cache = {
-      shows: parsed.shows ?? [],
-      movies: parsed.movies ?? [],
-      cachedAt: Date.now(),
-      version: CACHE_VERSION,
-    };
-
-    return NextResponse.json(cache, { headers: CORS_HEADERS });
+    return NextResponse.json(result, { headers: CORS_HEADERS });
   } catch (err) {
     console.error("[shows/recommendations] error:", err);
     return NextResponse.json(

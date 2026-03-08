@@ -22,11 +22,11 @@ export interface ShowItem {
   tmdbSearchTitle: string;
   trailerSearchQuery: string;
   mood: ShowMood;
+  posterUrl: string | null;
 }
 
 export interface ShowsSectionItem extends ShowItem {
   id: string;
-  posterUrl: string | null;
 }
 
 interface ShowsState {
@@ -46,7 +46,7 @@ interface LocalCacheEntry {
   cachedAt: number;
 }
 
-const CACHE_KEY = "shows_cache_v5";
+const CACHE_KEY = "shows_cache_v6";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ShowsContext = createContext<ShowsContextValue | null>(null);
@@ -66,7 +66,7 @@ function toSectionItem(item: ShowItem, index: number): ShowsSectionItem {
   return {
     ...item,
     id: `${item.type}-${index}`,
-    posterUrl: null,
+    posterUrl: item.posterUrl ?? null,
   };
 }
 
@@ -98,101 +98,56 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
     error: null,
   });
 
-  const fetchPosters = useCallback(
-    (
-      items: ShowsSectionItem[],
-      setter: React.Dispatch<React.SetStateAction<ShowsState>>,
-      key: "shows" | "movies",
-      base: string
-    ) => {
-      items.forEach((item) => {
-        const searchTitle = item.tmdbSearchTitle || item.title;
-        const yearParam = item.year ? `&year=${encodeURIComponent(item.year)}` : "";
-        const url = base
-          ? `${base}/api/shows/poster/?query=${encodeURIComponent(searchTitle)}&type=${item.type}${yearParam}`
-          : `/api/shows/poster?query=${encodeURIComponent(searchTitle)}&type=${item.type}${yearParam}`;
-
-        fetch(url)
-          .then((r) => (r.ok ? r.json() : { poster: null }))
-          .then((data: { poster: string | null }) => {
-            if (!data.poster) return;
-            setter((prev) => {
-              const updated = prev[key].map((p) =>
-                p.id === item.id ? { ...p, posterUrl: data.poster } : p
-              );
-              const next = { ...prev, [key]: updated };
-              // Update localStorage with poster as it arrives
-              writeLocalCache({
-                shows: next.shows,
-                movies: next.movies,
-                cachedAt: Date.now(),
-              });
-              return next;
-            });
-          })
-          .catch(() => {});
-      });
-    },
-    []
-  );
-
-  const fetchData = useCallback(
-    (force = false) => {
-      // Check localStorage first (unless forced)
-      if (!force) {
-        const cached = readLocalCache();
-        if (cached) {
-          setState({
-            shows: cached.shows,
-            movies: cached.movies,
-            loading: false,
-            error: null,
-          });
-          return;
-        }
-      }
-
-      setState((prev) => ({ ...prev, loading: true, error: null }));
-
-      const base = getApiBase();
-      const url = base
-        ? `${base}/api/shows/recommendations/`
-        : "/api/shows/recommendations";
-
-      fetch(url)
-        .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
-        .then((data: { shows: ShowItem[]; movies: ShowItem[] }) => {
-          const showItems = (data.shows ?? []).map((s, i) =>
-            toSectionItem(s, i)
-          );
-          const movieItems = (data.movies ?? []).map((m, i) =>
-            toSectionItem(m, i)
-          );
-
-          const cacheEntry: LocalCacheEntry = {
-            shows: showItems,
-            movies: movieItems,
-            cachedAt: Date.now(),
-          };
-          writeLocalCache(cacheEntry);
-
-          setState({ shows: showItems, movies: movieItems, loading: false, error: null });
-
-          // Kick off poster fetches in background
-          fetchPosters(showItems, setState, "shows", base);
-          fetchPosters(movieItems, setState, "movies", base);
-        })
-        .catch((e) => {
-          console.error("[shows] recommendations error:", e);
-          setState((prev) => ({
-            ...prev,
-            loading: false,
-            error: "Couldn't load recommendations. Please try again.",
-          }));
+  const fetchData = useCallback((force = false) => {
+    if (!force) {
+      const cached = readLocalCache();
+      if (cached) {
+        setState({
+          shows: cached.shows,
+          movies: cached.movies,
+          loading: false,
+          error: null,
         });
-    },
-    [fetchPosters]
-  );
+        return;
+      }
+    }
+
+    setState((prev) => ({ ...prev, loading: true, error: null }));
+
+    const base = getApiBase();
+    const url = base
+      ? `${base}/api/shows/recommendations/`
+      : "/api/shows/recommendations";
+
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
+      .then((data: { shows: ShowItem[]; movies: ShowItem[] }) => {
+        const showItems = (data.shows ?? []).map((s, i) => toSectionItem(s, i));
+        const movieItems = (data.movies ?? []).map((m, i) => toSectionItem(m, i));
+
+        const cacheEntry: LocalCacheEntry = {
+          shows: showItems,
+          movies: movieItems,
+          cachedAt: Date.now(),
+        };
+        writeLocalCache(cacheEntry);
+
+        setState({
+          shows: showItems,
+          movies: movieItems,
+          loading: false,
+          error: null,
+        });
+      })
+      .catch((e) => {
+        console.error("[shows] recommendations error:", e);
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: "Couldn't load recommendations. Please try again.",
+        }));
+      });
+  }, []);
 
   // Kick off fetch immediately when provider mounts (app start)
   useEffect(() => {

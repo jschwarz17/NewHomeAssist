@@ -31,12 +31,12 @@ export default function ShowsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadingTrailerId, setLoadingTrailerId] = useState<string | null>(null);
 
-  // ── Filter items by mood ──────────────────────────────────────────────────
+  // ── Filter items (All vs Int'l = non-USA) ─────────────────────────────────
   function applyFilter(items: ShowsSectionItem[]) {
     if (activeFilter === "all") return items;
     if (activeFilter === "intl")
       return items.filter(
-        (item) => item.language && item.language.toLowerCase() !== "english"
+        (item) => item.country && item.country.toUpperCase() !== "USA"
       );
     return items.filter((item) => item.mood === activeFilter);
   }
