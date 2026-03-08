@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import React from "react";
 import type { ShowMood } from "@/context/ShowsContext";
 
 export interface ShowCardProps {
@@ -44,6 +45,7 @@ export function ShowCard({
   onPlayTrailer,
   isLoadingTrailer,
 }: ShowCardProps) {
+  const [imgError, setImgError] = React.useState(false);
   const isInternational = language && language.toLowerCase() !== "english";
   return (
     <div
@@ -55,7 +57,7 @@ export function ShowCard({
       <div className="flex gap-3 p-3">
         {/* Poster */}
         <div className="flex-shrink-0 w-[72px] h-[108px] rounded-lg overflow-hidden bg-zinc-800">
-          {posterUrl ? (
+          {posterUrl && !imgError ? (
             <Image
               src={posterUrl}
               alt={title}
@@ -63,6 +65,7 @@ export function ShowCard({
               height={108}
               className="object-cover w-full h-full"
               unoptimized
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">

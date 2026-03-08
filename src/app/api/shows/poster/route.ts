@@ -70,11 +70,17 @@ export async function GET(req: NextRequest) {
             return Math.abs(cy - target) < Math.abs(ay - target) ? cur : acc;
           });
         }
-        poster =
+        const candidate =
           best.imageSet?.verticalPoster?.w480 ??
           best.imageSet?.verticalPoster?.w360 ??
           best.imageSet?.verticalPoster?.w240 ??
           null;
+
+        // Streaming Availability returns title-card placeholders for missing art.
+        // These have "no_poster" or "placeholder" in the URL path — skip them.
+        if (candidate && !candidate.includes("no_poster") && !candidate.includes("placeholder")) {
+          poster = candidate;
+        }
       }
     } else {
       console.error(`[poster] Streaming Availability API error: ${res.status}`);
