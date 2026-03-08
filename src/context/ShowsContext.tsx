@@ -120,7 +120,14 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       : "/api/shows/recommendations";
 
     fetch(url)
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
+      .then((r) =>
+        r.ok
+          ? r.json()
+          : r.json().then(
+              (body: { error?: string }) => Promise.reject(body?.error ?? r.statusText),
+              () => Promise.reject(r.statusText)
+            )
+      )
       .then((data: { shows: ShowItem[]; movies: ShowItem[] }) => {
         const showItems = (data.shows ?? []).map((s, i) => toSectionItem(s, i));
         const movieItems = (data.movies ?? []).map((m, i) => toSectionItem(m, i));
@@ -144,7 +151,7 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: "Couldn't load recommendations. Please try again.",
+          error: typeof e === "string" ? e : "Couldn't load recommendations. Please try again.",
         }));
       });
   }, []);

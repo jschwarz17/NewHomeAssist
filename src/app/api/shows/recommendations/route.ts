@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getShowsCache, setShowsCache } from "@/lib/shows-cache";
-import { fetchRecommendationsFromGrok, type ShowItem } from "@/lib/shows-recommendations-grok";
+import { getShowsCache } from "@/lib/shows-cache";
+import type { ShowItem } from "@/lib/shows-recommendations-grok";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -32,30 +32,14 @@ export async function GET() {
     );
   }
 
-  // 2. No cache or stale: call Grok (e.g. first request of the day before cron, or no Postgres)
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "XAI_API_KEY not configured" },
-      { status: 500, headers: CORS_HEADERS }
-    );
-  }
-
-  try {
-    const result = await fetchRecommendationsFromGrok(apiKey);
-    await setShowsCache({
-      shows: result.shows,
-      movies: result.movies,
-      cachedAt: result.cachedAt,
-      version: result.version,
-    });
-    return NextResponse.json(result, { headers: CORS_HEADERS });
-  } catch (err) {
-    console.error("[shows/recommendations] error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch recommendations", details: String(err) },
-      { status: 500, headers: CORS_HEADERS }
-    );
-  }
+  // 2. No cache: do not call Grok here (it takes 60+ s and causes 504). Only the 6am cron fills the cache.
+  return NextResponse.json(
+    {
+      error:
+        "Recommendations refresh daily at 6am ET. Try again in a few minutes or tap Retry.",
+    },
+    { status: 503, headers: CORS_HEADERS }
+  );
 }
 
 export async function OPTIONS() {

@@ -3,17 +3,23 @@ import { initShowsCacheTable, setShowsCache } from "@/lib/shows-cache";
 import { fetchRecommendationsFromGrok } from "@/lib/shows-recommendations-grok";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
- * Called by Vercel Cron at 6am UTC daily. Pre-fetches Ara recommendations into Postgres
- * so the app always has instant data when users open it.
- * Secured by CRON_SECRET (Vercel sends it in Authorization header).
+ * Pre-fetches Ara recommendations into Postgres (same job that runs at 6am ET).
+ * - Vercel Cron: sends Authorization: Bearer CRON_SECRET.
+ * - Manual test: open in browser or curl with ?key=YOUR_CRON_SECRET (takes 1–2 min).
+ * After it returns 200, refresh the Shows page to see data.
  */
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");
-  if (secret && auth !== `Bearer ${secret}`) {
+  const keyParam = req.nextUrl.searchParams.get("key");
+  const authorized =
+    !secret ||
+    auth === `Bearer ${secret}` ||
+    (keyParam !== null && keyParam === secret);
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
