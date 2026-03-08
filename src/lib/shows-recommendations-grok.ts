@@ -67,14 +67,16 @@ IMPORTANT: For each of the 20 items, you must include the direct poster image UR
 
 const CACHE_VERSION = 4;
 
-function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[] } | null {
+export type ParseFailureReason = "no_json_marker" | "no_brace" | "json_parse_error" | "empty_shows";
+
+function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[] } | { error: ParseFailureReason } {
   const jsonMarker = "---JSON---";
   const idx = raw.indexOf(jsonMarker);
-  if (idx === -1) return null;
+  if (idx === -1) return { error: "no_json_marker" };
   let jsonStr = raw.slice(idx + jsonMarker.length).replace(/^[\s\n]+/, "").trim();
   jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
   const firstBrace = jsonStr.indexOf("{");
-  if (firstBrace === -1) return null;
+  if (firstBrace === -1) return { error: "no_brace" };
   let depth = 0;
   let end = firstBrace;
   for (let i = firstBrace; i < jsonStr.length; i++) {
@@ -95,7 +97,7 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
   try {
     obj = JSON.parse(slice) as typeof obj;
   } catch {
-    return null;
+    return { error: "json_parse_error" };
   }
   const toItem = (
     t: "show" | "movie",
@@ -116,11 +118,11 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
   });
   const shows: ShowItem[] = (obj.shows ?? []).map((o) => toItem("show", o));
   const movies: ShowItem[] = (obj.movies ?? []).map((o) => toItem("movie", o));
+  if (shows.length === 0) return { error: "empty_shows" };
   return { shows, movies };
 }
 
-/** Calls Grok once and returns parsed recommendations. Throws on API or parse failure. */
-export async function fetchRecommendationsFromGrok(apiKey: string): Promise<RecommendationsResult> {
+async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> {
   const res = await fetch("https://api.x.ai/v1/responses", {
     method: "POST",
     headers: {
@@ -156,8 +158,20 @@ export async function fetchRecommendationsFromGrok(apiKey: string): Promise<Reco
   const raw = messageItem?.content?.find((c) => c.type === "output_text")?.text ?? "";
 
   const parsed = parseGrokResponse(raw);
-  if (!parsed || parsed.shows.length === 0) {
-    throw new Error("Grok did not return valid structured data");
+  if ("error" in parsed) {
+    const reason = parsed.error;
+    const snippet = raw.length > 800 ? raw.slice(-800) : raw;
+    const msg =
+      reason === "no_json_marker"
+        ? "Grok did not include ---JSON--- block in response"
+        : reason === "no_brace"
+          ? "Grok's ---JSON--- block had no JSON object"
+          : reason === "json_parse_error"
+            ? "Grok's JSON after ---JSON--- failed to parse"
+            : "Grok returned empty shows array";
+    throw new Error(
+      `Grok did not return valid structured data: ${msg}. Raw tail: ${snippet.replace(/\n/g, " ").slice(0, 400)}`
+    );
   }
 
   return {
@@ -166,4 +180,18 @@ export async function fetchRecommendationsFromGrok(apiKey: string): Promise<Reco
     cachedAt: Date.now(),
     version: CACHE_VERSION,
   };
+}
+
+/** Calls Grok and returns parsed recommendations. Retries once on structured-data parse failure. Throws on API or parse failure. */
+export async function fetchRecommendationsFromGrok(apiKey: string): Promise<RecommendationsResult> {
+  try {
+    return await callGrokAndParse(apiKey);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("Grok did not return valid structured data") && message.includes("Raw tail:")) {
+      console.warn("[shows-recommendations-grok] First attempt failed, retrying once...");
+      return await callGrokAndParse(apiKey);
+    }
+    throw err;
+  }
 }
