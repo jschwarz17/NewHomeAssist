@@ -146,17 +146,11 @@ export async function GET(req: NextRequest) {
     if (rapidKey) {
       poster = await fetchFromStreamingAvailability(query, type, year, rapidKey);
     }
-    // #region agent log
-    await fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a6a583'},body:JSON.stringify({sessionId:'a6a583',location:'poster/route.ts:afterSA',message:'SA result',data:{query,type,year,saResult:poster,hasRapidKey:!!rapidKey},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
 
     // 2. Grok live web search — used only when SA has no artwork
     if (!poster && xaiKey) {
       poster = await fetchFromGrok(query, type, year, xaiKey);
     }
-    // #region agent log
-    await fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a6a583'},body:JSON.stringify({sessionId:'a6a583',location:'poster/route.ts:final',message:'Final poster result',data:{query,type,year,finalPoster:poster,hasXaiKey:!!xaiKey},timestamp:Date.now(),hypothesisId:'D-E'})}).catch(()=>{});
-    // #endregion
   } catch (err) {
     console.error("[poster] fetch error:", err);
   }

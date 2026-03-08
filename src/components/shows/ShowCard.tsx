@@ -46,9 +46,7 @@ export function ShowCard({
   isLoadingTrailer,
 }: ShowCardProps) {
   const [imgError, setImgError] = React.useState(false);
-  // #region agent log
   React.useEffect(() => { setImgError(false); }, [posterUrl]);
-  // #endregion
   const isInternational = language && language.toLowerCase() !== "english";
   return (
     <div
@@ -68,12 +66,7 @@ export function ShowCard({
               height={108}
               className="object-cover w-full h-full"
               unoptimized
-              onError={() => {
-                // #region agent log
-                fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a6a583'},body:JSON.stringify({sessionId:'a6a583',location:'ShowCard.tsx:onError',message:'Image load failed',data:{title,posterUrl},timestamp:Date.now(),hypothesisId:'A-C-E'})}).catch(()=>{});
-                // #endregion
-                setImgError(true);
-              }}
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">

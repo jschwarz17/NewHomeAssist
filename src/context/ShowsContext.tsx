@@ -115,9 +115,6 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
         fetch(url)
           .then((r) => (r.ok ? r.json() : { poster: null }))
           .then((data: { poster: string | null }) => {
-            // #region agent log
-            fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a6a583'},body:JSON.stringify({sessionId:'a6a583',location:'ShowsContext.tsx:posterResult',message:'Poster fetch result',data:{title:item.title,type:item.type,year:item.year,poster:data.poster},timestamp:Date.now(),hypothesisId:'D-E'})}).catch(()=>{});
-            // #endregion
             if (!data.poster) return;
             setter((prev) => {
               const updated = prev[key].map((p) =>
@@ -145,11 +142,6 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       if (!force) {
         const cached = readLocalCache();
         if (cached) {
-          // #region agent log
-          const nullShows = cached.shows.filter(s => !s.posterUrl).map(s => s.title);
-          const nullMovies = cached.movies.filter(m => !m.posterUrl).map(m => m.title);
-          fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a6a583'},body:JSON.stringify({sessionId:'a6a583',location:'ShowsContext.tsx:cacheHit',message:'Cache hit - loading from localStorage',data:{showCount:cached.shows.length,movieCount:cached.movies.length,nullPosterShows:nullShows,nullPosterMovies:nullMovies,cachedAtAgo:Math.round((Date.now()-cached.cachedAt)/1000/60)+'min'},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
           setState({
             shows: cached.shows,
             movies: cached.movies,
