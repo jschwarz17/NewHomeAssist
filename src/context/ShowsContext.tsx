@@ -115,6 +115,9 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
         fetch(url)
           .then((r) => (r.ok ? r.json() : { poster: null }))
           .then((data: { poster: string | null }) => {
+            // #region agent log
+            fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'ShowsContext:poster-result',message:'Poster API response',data:{title:item.title,searchTitle,posterFound:!!data.poster,urlDomain:data.poster?new URL(data.poster).hostname:null,url:data.poster},timestamp:Date.now(),hypothesisId:'H-H'})}).catch(()=>{});
+            // #endregion
             if (!data.poster) return;
             setter((prev) => {
               const updated = prev[key].map((p) =>
@@ -142,6 +145,10 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       if (!force) {
         const cached = readLocalCache();
         if (cached) {
+          // #region agent log
+          const sampleUrls = [...cached.shows, ...cached.movies].slice(0, 5).map(i => ({ title: i.title, posterUrl: i.posterUrl }));
+          fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'ShowsContext:cache-hit',message:'Serving from localStorage cache',data:{cachedAt:new Date(cached.cachedAt).toISOString(),showCount:cached.shows.length,movieCount:cached.movies.length,sampleUrls},timestamp:Date.now(),hypothesisId:'H-G'})}).catch(()=>{});
+          // #endregion
           setState({
             shows: cached.shows,
             movies: cached.movies,
@@ -151,6 +158,9 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
           return;
         }
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8d3f76'},body:JSON.stringify({sessionId:'8d3f76',location:'ShowsContext:cache-miss',message:'No valid cache - fetching fresh from API',data:{force},timestamp:Date.now(),hypothesisId:'H-G'})}).catch(()=>{});
+      // #endregion
 
       setState((prev) => ({ ...prev, loading: true, error: null }));
 
