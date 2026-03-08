@@ -114,7 +114,7 @@ export default function ShowsPage() {
               </button>
               {process.env.NEXT_PUBLIC_REFRESH_KEY && (
                 <a
-                  href={`/api/cron/warm-shows?key=${process.env.NEXT_PUBLIC_REFRESH_KEY}`}
+                  href={`/api/cron/warm-shows?key=${encodeURIComponent(process.env.NEXT_PUBLIC_REFRESH_KEY)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-zinc-500 underline hover:text-zinc-400"

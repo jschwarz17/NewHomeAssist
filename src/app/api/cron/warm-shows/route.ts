@@ -12,13 +12,13 @@ export const maxDuration = 300;
  * After it returns 200, refresh the Shows page to see data.
  */
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
+  const secret = process.env.CRON_SECRET?.trim();
   const auth = req.headers.get("authorization");
-  const keyParam = req.nextUrl.searchParams.get("key");
+  const keyParam = req.nextUrl.searchParams.get("key")?.trim();
   const authorized =
     !secret ||
     auth === `Bearer ${secret}` ||
-    (keyParam !== null && keyParam === secret);
+    (keyParam != null && keyParam !== "" && keyParam === secret);
   if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
