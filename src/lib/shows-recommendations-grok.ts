@@ -87,10 +87,16 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
       }
     }
   }
-  const obj = JSON.parse(jsonStr.slice(firstBrace, end)) as {
+  const slice = jsonStr.slice(firstBrace, end);
+  let obj: {
     shows?: Array<{ title?: string; year?: string; country?: string; posterUrl?: string | null; description?: string; streamingService?: string }>;
     movies?: Array<{ title?: string; year?: string; country?: string; posterUrl?: string | null; description?: string; streamingService?: string }>;
   };
+  try {
+    obj = JSON.parse(slice) as typeof obj;
+  } catch {
+    return null;
+  }
   const toItem = (
     t: "show" | "movie",
     o: { title?: string; year?: string; country?: string; posterUrl?: string | null; description?: string; streamingService?: string }
@@ -131,12 +137,20 @@ export async function fetchRecommendationsFromGrok(apiKey: string): Promise<Reco
     }),
   });
 
+  const bodyText = await res.text();
   if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Grok API error: ${res.status} — ${errText}`);
+    throw new Error(`Grok API error: ${res.status} — ${bodyText.slice(0, 200)}`);
   }
 
-  const data = await res.json();
+  let data: { output?: unknown[] };
+  try {
+    data = bodyText ? JSON.parse(bodyText) : {};
+  } catch {
+    throw new Error(
+      "Grok API returned invalid JSON (empty or truncated). Try again in a moment."
+    );
+  }
+
   type OutputItem = { type: string; content?: { type: string; text: string }[] };
   const messageItem = (data.output as OutputItem[] | undefined)?.find((o) => o.type === "message");
   const raw = messageItem?.content?.find((c) => c.type === "output_text")?.text ?? "";
