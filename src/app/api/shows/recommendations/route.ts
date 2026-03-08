@@ -28,9 +28,12 @@ interface Cache {
   shows: ShowItem[];
   movies: ShowItem[];
   cachedAt: number;
+  version: number;
 }
 
 let cache: Cache | null = null;
+// Increment this version to force-bust the in-memory cache after a prompt change
+const CACHE_VERSION = 2;
 const CACHE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const SYSTEM_PROMPT = `You are a movie and TV show recommendation engine. You have access to live web search — use it to find real, currently released or newly announced 2025 and 2026 movies and TV shows before responding.
@@ -41,6 +44,7 @@ Return a JSON object with two arrays: "shows" (10 items) and "movies" (10 items)
 
 SEARCH INSTRUCTIONS:
 - Search the web for "best new movies 2025 2026" and "best new TV shows 2025 2026" to find real, current titles.
+- Also search "best European movies 2025 2026" and "best European TV shows 2025 2026" for the 5 required European titles.
 - Only include titles confirmed by your web search as actually existing and released (or officially releasing in 2025/2026).
 - Do NOT invent titles. Every title must be verifiable on IMDB or TMDB.
 
@@ -55,7 +59,7 @@ CONTENT RULES:
    - quirky: offbeat, unconventional, stylized
    - funny: primarily comedy-driven
    - suspenseful: edge-of-seat tension, mystery, psychological
-6. Across the combined 20 titles, include exactly 3-4 international titles (non-English language originals) confirmed by your search.
+6. Across the combined 20 titles, include exactly 5 European titles (non-English language originals from Europe — e.g. French, German, Spanish, Italian, Scandinavian, etc.). Spread them between shows and movies. Search specifically for "best European movies 2025 2026" and "best European TV shows 2025 2026" to find real confirmed titles. They must still meet all other rules (action/thriller/crime primary, non-woke, mood tag).
 
 Each item must have exactly these fields:
 - title: string (exact official title as it appears on IMDB/TMDB)
@@ -71,7 +75,7 @@ Each item must have exactly these fields:
 - mood: string (one of: "fun", "gritty", "quirky", "funny", "suspenseful")`;
 
 export async function GET() {
-  if (cache && Date.now() - cache.cachedAt < CACHE_MS) {
+  if (cache && cache.version === CACHE_VERSION && Date.now() - cache.cachedAt < CACHE_MS) {
     return NextResponse.json(cache, { headers: CORS_HEADERS });
   }
 
@@ -132,6 +136,7 @@ export async function GET() {
       shows: parsed.shows ?? [],
       movies: parsed.movies ?? [],
       cachedAt: Date.now(),
+      version: CACHE_VERSION,
     };
 
     return NextResponse.json(cache, { headers: CORS_HEADERS });

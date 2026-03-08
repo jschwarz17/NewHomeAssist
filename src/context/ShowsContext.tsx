@@ -46,7 +46,7 @@ interface LocalCacheEntry {
   cachedAt: number;
 }
 
-const CACHE_KEY = "shows_cache_v4";
+const CACHE_KEY = "shows_cache_v5";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ShowsContext = createContext<ShowsContextValue | null>(null);
