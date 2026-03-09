@@ -61,19 +61,68 @@ function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: Pa
   jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
   const firstBrace = jsonStr.indexOf("{");
   if (firstBrace === -1) return { error: "no_brace" };
+  
+  // Try to find the complete JSON object by tracking braces
   let depth = 0;
   let end = firstBrace;
+  let inString = false;
+  let escapeNext = false;
+  
   for (let i = firstBrace; i < jsonStr.length; i++) {
-    if (jsonStr[i] === "{") depth++;
-    if (jsonStr[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        end = i + 1;
-        break;
+    const char = jsonStr[i];
+    
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    
+    if (char === "\\") {
+      escapeNext = true;
+      continue;
+    }
+    
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+    
+    if (!inString) {
+      if (char === "{") depth++;
+      if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
       }
     }
   }
-  const slice = jsonStr.slice(firstBrace, end);
+  
+  // If we didn't find a complete object, try to extract what we can
+  if (depth !== 0) {
+    let lastBrace = jsonStr.lastIndexOf("}");
+    if (lastBrace > firstBrace) {
+      const potentialSlice = jsonStr.slice(firstBrace, lastBrace + 1);
+      try {
+        const test = JSON.parse(potentialSlice);
+        if (test && test.artists) {
+          end = lastBrace + 1;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  }
+  
+  let slice = jsonStr.slice(firstBrace, end);
+  
+  // Try to fix common JSON issues
+  slice = slice.replace(/,(\s*[}\]])/g, "$1");
+  
+  if (depth > 0) {
+    slice += "}".repeat(depth);
+  }
+  
   let obj: {
     artists?: Array<{
       name?: string;
@@ -86,8 +135,15 @@ function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: Pa
   };
   try {
     obj = JSON.parse(slice) as typeof obj;
-  } catch {
-    return { error: "json_parse_error" };
+  } catch (parseError) {
+    slice = slice.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+    try {
+      obj = JSON.parse(slice) as typeof obj;
+    } catch {
+      console.error("[artists-recommendations-grok] JSON parse error:", parseError);
+      console.error("[artists-recommendations-grok] Attempted to parse:", slice.slice(0, 500));
+      return { error: "json_parse_error" };
+    }
   }
   const toItem = (
     o: {
@@ -146,7 +202,9 @@ async function callGrokAndParse(apiKey: string): Promise<ArtistsResult> {
   const messageItem = (data.output as OutputItem[] | undefined)?.find((o) => o.type === "message");
   const contentBlocks = messageItem?.content ?? [];
   const outputTextBlocks = contentBlocks.filter((c): c is { type: string; text: string } => c.type === "output_text");
-  const raw = messageItem?.content?.find((c) => c.type === "output_text")?.text ?? "";
+  
+  // Join all output_text blocks in case the response is split across multiple blocks
+  const raw = outputTextBlocks.map((b) => b.text).join("\n");
 
   const parsed = parseGrokResponse(raw);
   if ("error" in parsed) {
