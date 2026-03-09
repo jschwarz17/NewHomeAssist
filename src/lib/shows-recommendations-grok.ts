@@ -74,27 +74,89 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
   jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
   const firstBrace = jsonStr.indexOf("{");
   if (firstBrace === -1) return { error: "no_brace" };
+  
+  // Try to find the complete JSON object by tracking braces
   let depth = 0;
   let end = firstBrace;
+  let inString = false;
+  let escapeNext = false;
+  
   for (let i = firstBrace; i < jsonStr.length; i++) {
-    if (jsonStr[i] === "{") depth++;
-    if (jsonStr[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        end = i + 1;
-        break;
+    const char = jsonStr[i];
+    
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    
+    if (char === "\\") {
+      escapeNext = true;
+      continue;
+    }
+    
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+    
+    if (!inString) {
+      if (char === "{") depth++;
+      if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
       }
     }
   }
-  const slice = jsonStr.slice(firstBrace, end);
+  
+  // If we didn't find a complete object, try to extract what we can
+  if (depth !== 0) {
+    // Try to find the last complete closing brace
+    let lastBrace = jsonStr.lastIndexOf("}");
+    if (lastBrace > firstBrace) {
+      // Verify this might be a valid end
+      const potentialSlice = jsonStr.slice(firstBrace, lastBrace + 1);
+      try {
+        const test = JSON.parse(potentialSlice);
+        if (test && (test.shows || test.movies)) {
+          end = lastBrace + 1;
+        }
+      } catch {
+        // Ignore, will try other methods
+      }
+    }
+  }
+  
+  let slice = jsonStr.slice(firstBrace, end);
+  
+  // Try to fix common JSON issues
+  // Remove trailing commas before closing braces/brackets
+  slice = slice.replace(/,(\s*[}\]])/g, "$1");
+  
+  // Try to close incomplete JSON if needed
+  if (depth > 0) {
+    // Add missing closing braces
+    slice += "}".repeat(depth);
+  }
+  
   let obj: {
     shows?: Array<{ title?: string; year?: string; country?: string; posterUrl?: string | null; description?: string; streamingService?: string }>;
     movies?: Array<{ title?: string; year?: string; country?: string; posterUrl?: string | null; description?: string; streamingService?: string }>;
   };
   try {
     obj = JSON.parse(slice) as typeof obj;
-  } catch {
-    return { error: "json_parse_error" };
+  } catch (parseError) {
+    // Try one more time with a more aggressive cleanup
+    slice = slice.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+    try {
+      obj = JSON.parse(slice) as typeof obj;
+    } catch {
+      console.error("[shows-recommendations-grok] JSON parse error:", parseError);
+      console.error("[shows-recommendations-grok] Attempted to parse:", slice.slice(0, 500));
+      return { error: "json_parse_error" };
+    }
   }
   const toItem = (
     t: "show" | "movie",
@@ -162,7 +224,8 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
   const _allJoined = outputTextBlocks.map((b) => b.text).join("\n");
   fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b86282'},body:JSON.stringify({sessionId:'b86282',location:'shows-recommendations-grok.ts:extract',message:'Grok response extraction',data:{contentBlocksCount:contentBlocks.length,outputTextBlocksCount:outputTextBlocks.length,firstBlockLength:_rawFirstOnly.length,allJoinedLength:_allJoined.length,hasJsonMarkerFirst:_rawFirstOnly.includes('---JSON---'),hasJsonMarkerInJoined:_allJoined.includes('---JSON---'),first200:_rawFirstOnly.slice(0,200),tail400:_rawFirstOnly.slice(-400)},timestamp:Date.now(),hypothesisId:'H3-H4'})}).catch(()=>{});
   // #endregion
-  const raw = messageItem?.content?.find((c) => c.type === "output_text")?.text ?? "";
+  // Join all output_text blocks in case the response is split across multiple blocks
+  const raw = outputTextBlocks.map((b) => b.text).join("\n");
 
   const parsed = parseGrokResponse(raw);
   // #region agent log
