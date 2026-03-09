@@ -30,16 +30,13 @@ const ARA_SYSTEM_PROMPT = `You are Ara, my personal curator for gritty, edgy, fa
 
 Your task: Recommend ONLY shows and movies that (1) were released in the current calendar year or the previous calendar year (check the actual current date right now to know what "this year" and "last year" are — do NOT use 2025/2026 if the date has changed), (2) are already available to stream right now on major platforms (Netflix, Prime Video, Hulu, Max, Disney+, Apple TV+, Paramount+, etc.), and (3) perfectly match the gritty/edgy/non-woke vibe above.
 
-Return EXACTLY:
+Aim for 10 TV shows and 10 movies (20 total). If you cannot find that many that fit every rule, provide as many as you can (at least 5 shows and 5 movies) — you must still output the ---JSON--- block at the end with whatever you have. Never skip the ---JSON--- block.
 
-10 TV shows
-10 movies
-
-Among the 20 total recommendations, exactly 5 must be European productions (Germany, UK, France, Spain, Scandinavia, Eastern Europe, etc. — clearly label the country). The other 15 must be American productions.
+Among your recommendations, about 5 should be European productions (Germany, UK, France, Spain, Scandinavia, Eastern Europe, etc. — clearly label the country); the rest American.
 
 Output format (strictly follow this, no extra text, no lists outside the sections):
 
-TV SHOWS (10 total)
+TV SHOWS
 
 Title (Year) — Country
 [Insert official main poster image here using Grok's image search/render capability — only the real poster, large and clear]
@@ -50,7 +47,7 @@ Line 3: Current streaming platform(s).
 
 (Repeat exactly the same format for 2–10)
 
-MOVIES (10 total)
+MOVIES
 
 Title (Year) — Country
 [Insert official main poster image here using Grok's image search/render capability — only the real poster, large and clear]
@@ -59,11 +56,11 @@ Line 1: One-sentence hook.
 Line 2: Why it's gritty/edgy/fast and matches my vibe.
 Line 3: Current streaming platform(s).
 
-(Repeat exactly the same format for 2–10)
+(Repeat the same format for each additional item)
 
-Never recommend anything older than the two-year window, never recommend anything not currently streaming, never add woke titles, never pad the list. If you can't find exactly 10+10 that fit every rule, say so at the very top and stop. Otherwise deliver exactly 20 items in the format above.
+Never recommend anything older than the two-year window, never recommend anything not currently streaming, never add woke titles, never pad the list. Always end your response with the ---JSON--- block containing every show and movie you listed.
 
-IMPORTANT: For each of the 20 items, you must include the direct poster image URL on the line immediately after the "Title (Year) — Country" line (use web search to find the real poster image URL). After the last movie, on a new line write exactly ---JSON--- and then a valid JSON object with two keys: "shows" and "movies". Each show/movie in those arrays must have: "title", "year", "country", "posterUrl" (the direct image URL string, or null if not found), "description" (the three description lines merged into one string), "streamingService" (e.g. Netflix, Prime Video). No other text after the JSON.`;
+IMPORTANT: For each item, include the direct poster image URL on the line immediately after the "Title (Year) — Country" line (use web search to find the real poster image URL). After the last movie, on a new line write exactly ---JSON--- and then a valid JSON object with two keys: "shows" and "movies". Each show/movie in those arrays must have: "title", "year", "country", "posterUrl" (the direct image URL string, or null if not found), "description" (the three description lines merged into one string), "streamingService" (e.g. Netflix, Prime Video). No other text after the JSON.`;
 
 const CACHE_VERSION = 4;
 
@@ -140,6 +137,9 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
   });
 
   const bodyText = await res.text();
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b86282'},body:JSON.stringify({sessionId:'b86282',location:'shows-recommendations-grok.ts:api',message:'Grok API response',data:{status:res.status,bodyLength:bodyText.length},timestamp:Date.now(),hypothesisId:'H2-H4'})}).catch(()=>{});
+  // #endregion
   if (!res.ok) {
     throw new Error(`Grok API error: ${res.status} — ${bodyText.slice(0, 200)}`);
   }
@@ -155,9 +155,19 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
 
   type OutputItem = { type: string; content?: { type: string; text: string }[] };
   const messageItem = (data.output as OutputItem[] | undefined)?.find((o) => o.type === "message");
+  const contentBlocks = messageItem?.content ?? [];
+  const outputTextBlocks = contentBlocks.filter((c): c is { type: string; text: string } => c.type === "output_text");
+  // #region agent log
+  const _rawFirstOnly = outputTextBlocks[0]?.text ?? "";
+  const _allJoined = outputTextBlocks.map((b) => b.text).join("\n");
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b86282'},body:JSON.stringify({sessionId:'b86282',location:'shows-recommendations-grok.ts:extract',message:'Grok response extraction',data:{contentBlocksCount:contentBlocks.length,outputTextBlocksCount:outputTextBlocks.length,firstBlockLength:_rawFirstOnly.length,allJoinedLength:_allJoined.length,hasJsonMarkerFirst:_rawFirstOnly.includes('---JSON---'),hasJsonMarkerInJoined:_allJoined.includes('---JSON---'),first200:_rawFirstOnly.slice(0,200),tail400:_rawFirstOnly.slice(-400)},timestamp:Date.now(),hypothesisId:'H3-H4'})}).catch(()=>{});
+  // #endregion
   const raw = messageItem?.content?.find((c) => c.type === "output_text")?.text ?? "";
 
   const parsed = parseGrokResponse(raw);
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b86282'},body:JSON.stringify({sessionId:'b86282',location:'shows-recommendations-grok.ts:parse',message:'Parse result',data:{rawLength:raw.length,hasJsonMarker:raw.includes('---JSON---'),parseError:'error' in parsed ? parsed.error : null,showsCount:'shows' in parsed ? parsed.shows.length : 0,moviesCount:'movies' in parsed ? parsed.movies.length : 0},timestamp:Date.now(),hypothesisId:'H1-H2-H5'})}).catch(()=>{});
+  // #endregion
   if ("error" in parsed) {
     const reason = parsed.error;
     const snippet = raw.length > 800 ? raw.slice(-800) : raw;
