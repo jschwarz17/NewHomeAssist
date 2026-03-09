@@ -21,31 +21,29 @@ export function ArticleCard({
   const handlePlay = async () => {
     setIsLoadingContent(true);
     try {
-      // Fetch article content and send to read-aloud API
+      // Fetch article content
       const response = await fetch("/api/substack/article-content?url=" + encodeURIComponent(link));
       const data = await response.json();
       
-      if (data.content) {
-        const readResponse = await fetch("/api/substack/read-aloud", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: data.content, title }),
-        });
-        const readData = await readResponse.json();
-        
-        if (readData.success) {
-          // Use Web Speech API to read the text
-          if ("speechSynthesis" in window) {
-            const utterance = new SpeechSynthesisUtterance(readData.audioText || data.content);
-            utterance.rate = 0.9;
-            utterance.pitch = 1;
-            speechSynthesis.speak(utterance);
-            onPlay();
-          }
-        }
+      if (data.content && "speechSynthesis" in window) {
+        // Use Web Speech API to read the text directly
+        const fullText = title ? `${title}. ${data.content}` : data.content;
+        const utterance = new SpeechSynthesisUtterance(fullText);
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        speechSynthesis.speak(utterance);
+        onPlay();
+      } else if (!data.content) {
+        console.error("[ArticleCard] No content fetched");
+        alert("Could not fetch article content. Please try again.");
+      } else {
+        console.error("[ArticleCard] Web Speech API not supported");
+        alert("Text-to-speech is not supported in your browser.");
       }
     } catch (error) {
       console.error("[ArticleCard] Error reading article:", error);
+      alert("Error reading article. Please try again.");
     } finally {
       setIsLoadingContent(false);
     }
