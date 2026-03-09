@@ -8,52 +8,42 @@ import React, {
   useState,
 } from "react";
 
-export type ShowMood = "fun" | "gritty" | "quirky" | "funny" | "suspenseful";
-
-export interface ShowItem {
-  title: string;
-  year: string;
-  type: "movie" | "show";
+export interface ArtistItem {
+  name: string;
   description: string;
   genre: string;
-  country: string;
-  language: string;
-  streamingService: string;
-  tmdbSearchTitle: string;
-  trailerSearchQuery: string;
-  mood: ShowMood;
-  posterUrl: string | null;
+  spotifyId: string | null;
+  spotifyTrackUri: string | null;
+  imageUrl: string | null;
 }
 
-export interface ShowsSectionItem extends ShowItem {
+export interface ArtistSectionItem extends ArtistItem {
   id: string;
 }
 
-interface ShowsState {
-  shows: ShowsSectionItem[];
-  movies: ShowsSectionItem[];
+interface ArtistsState {
+  artists: ArtistSectionItem[];
   loading: boolean;
   error: string | null;
 }
 
-interface ShowsContextValue extends ShowsState {
+interface ArtistsContextValue extends ArtistsState {
   refresh: () => void;
 }
 
 interface LocalCacheEntry {
-  shows: ShowsSectionItem[];
-  movies: ShowsSectionItem[];
+  artists: ArtistSectionItem[];
   cachedAt: number;
 }
 
-const CACHE_KEY = "shows_cache_v6";
+const CACHE_KEY = "artists_cache_v1";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-const ShowsContext = createContext<ShowsContextValue | null>(null);
+const ArtistsContext = createContext<ArtistsContextValue | null>(null);
 
-export function useShows() {
-  const ctx = useContext(ShowsContext);
-  if (!ctx) throw new Error("useShows must be used within ShowsProvider");
+export function useArtists() {
+  const ctx = useContext(ArtistsContext);
+  if (!ctx) throw new Error("useArtists must be used within ArtistsProvider");
   return ctx;
 }
 
@@ -62,11 +52,10 @@ function getApiBase(): string {
   return (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "");
 }
 
-function toSectionItem(item: ShowItem, index: number): ShowsSectionItem {
+function toSectionItem(item: ArtistItem, index: number): ArtistSectionItem {
   return {
     ...item,
-    id: `${item.type}-${index}`,
-    posterUrl: item.posterUrl ?? null,
+    id: `artist-${index}`,
   };
 }
 
@@ -90,10 +79,9 @@ function writeLocalCache(entry: LocalCacheEntry) {
   }
 }
 
-export function ShowsProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<ShowsState>({
-    shows: [],
-    movies: [],
+export function ArtistsProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<ArtistsState>({
+    artists: [],
     loading: true,
     error: null,
   });
@@ -103,8 +91,7 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       const cached = readLocalCache();
       if (cached) {
         setState({
-          shows: cached.shows,
-          movies: cached.movies,
+          artists: cached.artists,
           loading: false,
           error: null,
         });
@@ -116,8 +103,8 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
 
     const base = getApiBase();
     const url = base
-      ? `${base}/api/shows/recommendations/`
-      : "/api/shows/recommendations";
+      ? `${base}/api/artists/recommendations/`
+      : "/api/artists/recommendations";
 
     // Add timeout to prevent hanging
     const controller = new AbortController();
@@ -132,33 +119,30 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
               () => Promise.reject(r.statusText)
             )
       )
-      .then((data: { shows: ShowItem[]; movies: ShowItem[] }) => {
+      .then((data: { artists: ArtistItem[] }) => {
         clearTimeout(timeoutId);
-        const showItems = (data.shows ?? []).map((s, i) => toSectionItem(s, i));
-        const movieItems = (data.movies ?? []).map((m, i) => toSectionItem(m, i));
+        const artistItems = (data.artists ?? []).map((a, i) => toSectionItem(a, i));
 
         const cacheEntry: LocalCacheEntry = {
-          shows: showItems,
-          movies: movieItems,
+          artists: artistItems,
           cachedAt: Date.now(),
         };
         writeLocalCache(cacheEntry);
 
         setState({
-          shows: showItems,
-          movies: movieItems,
+          artists: artistItems,
           loading: false,
           error: null,
         });
       })
       .catch((e) => {
         clearTimeout(timeoutId);
-        console.error("[shows] recommendations error:", e);
+        console.error("[artists] recommendations error:", e);
         const errorMessage = e.name === "AbortError" 
           ? "Request timed out. Please try again."
           : typeof e === "string" 
             ? e 
-            : "Couldn't load recommendations. Please try again.";
+            : "Couldn't load artists. Please try again.";
         setState((prev) => ({
           ...prev,
           loading: false,
@@ -183,8 +167,8 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
   }, [fetchData]);
 
   return (
-    <ShowsContext.Provider value={{ ...state, refresh }}>
+    <ArtistsContext.Provider value={{ ...state, refresh }}>
       {children}
-    </ShowsContext.Provider>
+    </ArtistsContext.Provider>
   );
 }

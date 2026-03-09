@@ -5,6 +5,8 @@ import { VoiceProvider } from "@/context/VoiceProvider";
 import { YouTubeProvider, useYouTube } from "@/context/YouTubeContext";
 import { YouTubeOverlay } from "@/components/YouTubeOverlay";
 import { ShowsProvider } from "@/context/ShowsContext";
+import { ArtistsProvider } from "@/context/ArtistsContext";
+import { SubstackProvider } from "@/context/SubstackContext";
 
 function useSpotifyDeepLink() {
   useEffect(() => {
@@ -74,7 +76,11 @@ export function VoiceProviderWrapper({
   return (
     <YouTubeProvider>
       <ShowsProvider>
-        <VoiceProviderInner>{children}</VoiceProviderInner>
+        <ArtistsProvider>
+          <SubstackProvider>
+            <VoiceProviderInner>{children}</VoiceProviderInner>
+          </SubstackProvider>
+        </ArtistsProvider>
       </ShowsProvider>
     </YouTubeProvider>
   );
