@@ -14,13 +14,13 @@ export interface SubstackArticle {
 const SUBSTACK_FEEDS = {
   AI: [
     "https://thebatch.substack.com/feed", // Andrew Ng's The Batch
+    "https://lastweekin.ai/feed", // Last Week in AI
     "https://www.theinsaneapp.com/feed", // The Insane App
-    "https://www.lastweekinai.com/feed", // Last Week in AI
   ],
   Politics: [
-    "https://www.thefp.com/feed", // The Free Press (center-right)
-    "https://www.commentary.org/feed", // Commentary Magazine
-    "https://www.nationalreview.com/feed", // National Review
+    "https://www.thefp.com/feed", // The Free Press (center-right, not left-leaning)
+    "https://www.commentary.org/feed", // Commentary Magazine (center-right)
+    "https://www.nationalreview.com/feed", // National Review (conservative)
   ],
   Fintech: [
     "https://www.fintechfutures.com/feed", // Fintech Futures
