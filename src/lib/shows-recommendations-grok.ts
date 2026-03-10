@@ -216,7 +216,7 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
   return { shows, movies };
 }
 
-const REQUEST_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 240000;
 
 async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> {
   const controller = new AbortController();

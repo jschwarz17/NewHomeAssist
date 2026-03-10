@@ -168,7 +168,7 @@ function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: Pa
   return { artists };
 }
 
-const REQUEST_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 240000;
 
 async function callGrokAndParse(apiKey: string): Promise<ArtistsResult> {
   const controller = new AbortController();

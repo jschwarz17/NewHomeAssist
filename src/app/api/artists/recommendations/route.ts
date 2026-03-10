@@ -11,7 +11,7 @@ import {
 } from "@/lib/artists-recommendations-utils";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",

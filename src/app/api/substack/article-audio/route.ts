@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const XAI_TTS_URL = "https://api.x.ai/v1/tts";
 const MAX_TTS_CHARS = 4000;
