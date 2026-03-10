@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { CURATED_ARTISTS } from "@/lib/curated-artists";
 import type { ArtistItem } from "@/lib/artists-recommendations-grok";
 import { fetchArtistsFromGrok } from "@/lib/artists-recommendations-grok";
@@ -37,7 +37,8 @@ function buildNotice(liveError: string | null): string | undefined {
 // Re-export for consumers that import from the route
 export type { ArtistItem } from "@/lib/artists-recommendations-grok";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const debug = req.nextUrl.searchParams.get("debug") === "1";
   const fallback = buildArtistsResult({
     artists: CURATED_ARTISTS as ArtistItem[],
     cachedAt: Date.now(),
@@ -58,6 +59,7 @@ export async function GET() {
       {
         ...freshCache,
         source: "cache",
+        debug: debug ? null : undefined,
       },
       { headers: CORS_HEADERS }
     );
@@ -88,6 +90,7 @@ export async function GET() {
           {
             ...merged,
             source: "live",
+            debug: debug ? null : undefined,
           },
           { headers: CORS_HEADERS }
         );
@@ -104,6 +107,7 @@ export async function GET() {
       ...mergedFallback,
       source: staleCache.artists.length ? "stale-cache" : "fallback",
       notice: buildNotice(liveError),
+      debug: debug ? liveError : undefined,
     },
     { headers: CORS_HEADERS }
   );

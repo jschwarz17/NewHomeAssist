@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   CURATED_MOVIES,
   CURATED_SHOWS,
@@ -42,7 +42,8 @@ function buildNotice(liveError: string | null): string | undefined {
 export type { ShowItem } from "@/lib/shows-recommendations-grok";
 export type { ShowMood } from "@/lib/shows-recommendations-grok";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const debug = req.nextUrl.searchParams.get("debug") === "1";
   const fallback = buildRecommendationsResult(
     {
       shows: CURATED_SHOWS as ShowItem[],
@@ -67,6 +68,7 @@ export async function GET() {
       {
         ...freshCache,
         source: "cache",
+        debug: debug ? null : undefined,
       },
       { headers: CORS_HEADERS }
     );
@@ -100,6 +102,7 @@ export async function GET() {
           {
             ...merged,
             source: "live",
+            debug: debug ? null : undefined,
           },
           { headers: CORS_HEADERS }
         );
@@ -116,6 +119,7 @@ export async function GET() {
       ...mergedFallback,
       source: staleCache.shows.length || staleCache.movies.length ? "stale-cache" : "fallback",
       notice: buildNotice(liveError),
+      debug: debug ? liveError : undefined,
     },
     { headers: CORS_HEADERS }
   );
