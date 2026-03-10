@@ -23,6 +23,21 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+function buildNotice(liveError: string | null): string | undefined {
+  if (!liveError) return undefined;
+  const normalized = liveError.toLowerCase();
+
+  if (normalized.includes("used all available credits") || normalized.includes("monthly spending limit")) {
+    return "Live Ara recommendations are temporarily unavailable because the xAI account has exhausted its credits or spending limit, so this page is showing the recent fallback picks instead.";
+  }
+
+  if (normalized.includes("timeout")) {
+    return "Live Ara recommendations timed out, so this page is showing the recent fallback picks instead.";
+  }
+
+  return "Live Ara recommendations are temporarily unavailable, so this page is showing the recent fallback picks instead.";
+}
+
 // Re-export for consumers that import from the route
 export type { ShowItem } from "@/lib/shows-recommendations-grok";
 export type { ShowMood } from "@/lib/shows-recommendations-grok";
@@ -100,9 +115,7 @@ export async function GET() {
     {
       ...mergedFallback,
       source: staleCache.shows.length || staleCache.movies.length ? "stale-cache" : "fallback",
-      notice: liveError
-        ? `Live refresh failed, so Ara is showing the last good recent picks instead. ${liveError}`
-        : undefined,
+      notice: buildNotice(liveError),
     },
     { headers: CORS_HEADERS }
   );

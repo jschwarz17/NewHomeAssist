@@ -26,7 +26,7 @@ function getApiBase(): string {
 
 export default function ShowsPage() {
   const { playVideo } = useYouTube();
-  const { shows, movies, loading, error, refresh } = useShows();
+  const { shows, movies, loading, error, notice, refresh } = useShows();
 
   const [activeFilter, setActiveFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -113,6 +113,12 @@ export default function ShowsPage() {
             </button>
           ))}
         </div>
+
+        {notice && (
+          <div className="mb-4 rounded-xl border border-amber-900/60 bg-amber-950/30 px-4 py-3">
+            <p className="text-xs leading-relaxed text-amber-300">{notice}</p>
+          </div>
+        )}
 
         {error ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-center">

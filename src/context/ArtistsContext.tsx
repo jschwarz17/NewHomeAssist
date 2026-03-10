@@ -28,6 +28,7 @@ interface ArtistsState {
   artists: ArtistSectionItem[];
   loading: boolean;
   error: string | null;
+  notice: string | null;
 }
 
 interface ArtistsContextValue extends ArtistsState {
@@ -37,6 +38,7 @@ interface ArtistsContextValue extends ArtistsState {
 interface LocalCacheEntry {
   artists: ArtistSectionItem[];
   cachedAt: number;
+  notice: string | null;
 }
 
 const CACHE_KEY = "artists_cache_v3";
@@ -108,6 +110,7 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
     artists: [],
     loading: true,
     error: null,
+    notice: null,
   });
 
   const fetchData = useCallback((force = false) => {
@@ -118,12 +121,13 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
           artists: cached.artists,
           loading: false,
           error: null,
+          notice: cached.notice ?? null,
         });
         return;
       }
     }
 
-    setState((prev) => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null, notice: prev.notice ?? null }));
 
     const base = getApiBase();
     const url = base
@@ -143,7 +147,7 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
               () => Promise.reject(r.statusText)
             )
       )
-      .then((data: { artists: ArtistItem[] }) => {
+      .then((data: { artists: ArtistItem[]; notice?: string | null }) => {
         clearTimeout(timeoutId);
         const sourceArtists =
           Array.isArray(data.artists) && data.artists.every(isUsableArtistItem)
@@ -154,6 +158,7 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
         const cacheEntry: LocalCacheEntry = {
           artists: artistItems,
           cachedAt: Date.now(),
+          notice: data.notice ?? null,
         };
         writeLocalCache(cacheEntry);
 
@@ -161,6 +166,7 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
           artists: artistItems,
           loading: false,
           error: null,
+          notice: data.notice ?? null,
         });
       })
       .catch((e) => {
@@ -170,6 +176,7 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
           artists: getFallbackArtists(),
           loading: false,
           error: null,
+          notice: null,
         });
       });
   }, []);

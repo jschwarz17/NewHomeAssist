@@ -5,7 +5,7 @@ import { useArtists } from "@/context/ArtistsContext";
 import { ArtistsSection } from "@/components/artists/ArtistsSection";
 
 export default function ArtistsPage() {
-  const { artists, loading, error, refresh } = useArtists();
+  const { artists, loading, error, notice, refresh } = useArtists();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -17,6 +17,12 @@ export default function ArtistsPage() {
   return (
     <main className="flex-1 bg-black min-h-screen">
       <div className="max-w-2xl mx-auto px-4 py-6">
+        {notice && (
+          <div className="mb-4 rounded-xl border border-amber-900/60 bg-amber-950/30 px-4 py-3">
+            <p className="text-xs leading-relaxed text-amber-300">{notice}</p>
+          </div>
+        )}
+
         {error ? (
           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-center">
             <p className="text-zinc-400 text-sm">{error}</p>

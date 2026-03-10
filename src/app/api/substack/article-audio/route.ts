@@ -47,9 +47,15 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      const normalized = errorText.toLowerCase();
+      const userFacingError =
+        normalized.includes("used all available credits") ||
+        normalized.includes("monthly spending limit")
+          ? "Ara audio is temporarily unavailable because the xAI account has exhausted its credits or spending limit."
+          : "Failed to generate Ara audio";
       return NextResponse.json(
         {
-          error: "Failed to generate Ara audio",
+          error: userFacingError,
           detail: errorText.slice(0, 500),
         },
         { status: 502 }

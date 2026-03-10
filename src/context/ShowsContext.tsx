@@ -36,6 +36,7 @@ interface ShowsState {
   movies: ShowsSectionItem[];
   loading: boolean;
   error: string | null;
+  notice: string | null;
 }
 
 interface ShowsContextValue extends ShowsState {
@@ -46,6 +47,7 @@ interface LocalCacheEntry {
   shows: ShowsSectionItem[];
   movies: ShowsSectionItem[];
   cachedAt: number;
+  notice: string | null;
 }
 
 const CACHE_KEY = "shows_cache_v8";
@@ -126,6 +128,7 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
     movies: [],
     loading: true,
     error: null,
+    notice: null,
   });
 
   const fetchData = useCallback((force = false) => {
@@ -137,12 +140,13 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
           movies: cached.movies,
           loading: false,
           error: null,
+          notice: cached.notice ?? null,
         });
         return;
       }
     }
 
-    setState((prev) => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null, notice: prev.notice ?? null }));
 
     const base = getApiBase();
     const url = base
@@ -162,7 +166,7 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
               () => Promise.reject(r.statusText)
             )
       )
-      .then((data: { shows: ShowItem[]; movies: ShowItem[] }) => {
+      .then((data: { shows: ShowItem[]; movies: ShowItem[]; notice?: string | null }) => {
         clearTimeout(timeoutId);
         const sourceShows =
           Array.isArray(data.shows) && data.shows.every(isUsableShowItem)
@@ -179,6 +183,7 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
           shows: showItems,
           movies: movieItems,
           cachedAt: Date.now(),
+          notice: data.notice ?? null,
         };
         writeLocalCache(cacheEntry);
 
@@ -187,6 +192,7 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
           movies: movieItems,
           loading: false,
           error: null,
+          notice: data.notice ?? null,
         });
       })
       .catch((e) => {
@@ -197,6 +203,7 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
           ...fallback,
           loading: false,
           error: null,
+          notice: null,
         });
       });
   }, []);
