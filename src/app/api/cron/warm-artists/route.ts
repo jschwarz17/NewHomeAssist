@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initArtistsCacheTable, setArtistsCache } from "@/lib/artists-cache";
 import { fetchArtistsFromGrok } from "@/lib/artists-recommendations-grok";
+import { buildArtistsResult } from "@/lib/artists-recommendations-utils";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   try {
     await initArtistsCacheTable();
-    const result = await fetchArtistsFromGrok(apiKey);
+    const result = buildArtistsResult(await fetchArtistsFromGrok(apiKey));
     await setArtistsCache({
       artists: result.artists,
       cachedAt: result.cachedAt,
@@ -38,7 +39,6 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json({ ok: true, cachedAt: result.cachedAt });
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
     console.error("[cron/warm-artists] error:", err);
     return NextResponse.json(
       { error: "Failed to warm artists cache", details: String(err) },

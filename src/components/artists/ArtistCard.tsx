@@ -17,6 +17,8 @@ export function ArtistCard({
   spotifyId,
   spotifyTrackUri,
   imageUrl,
+  breakoutYear,
+  tractionSummary,
   isSelected,
   onSelect,
 }: ArtistCardProps) {
@@ -115,6 +117,11 @@ export function ArtistCard({
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
               {genre}
             </span>
+            {breakoutYear && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-400">
+                Breakout {breakoutYear}
+              </span>
+            )}
           </div>
 
           <p className={`text-zinc-400 text-xs mt-1.5 leading-relaxed ${isSelected ? "" : "line-clamp-2"}`}>
@@ -124,12 +131,17 @@ export function ArtistCard({
       </div>
 
       {/* Spotify widget: below each artist so user can play a song */}
-      {hasSpotifyWidget && (
+      {(hasSpotifyWidget || tractionSummary) && (
         <div
           className="px-3 pb-3"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="border-t border-zinc-800 pt-3">
+            {tractionSummary && (
+              <p className="mb-2 text-[11px] leading-relaxed text-zinc-500">
+                {tractionSummary}
+              </p>
+            )}
             <div className="mb-2 flex flex-wrap gap-2">
               {spotifyTrackUrl && (
                 <button

@@ -7,7 +7,9 @@ interface ArticlesSectionProps {
   title: string;
   articles: SubstackArticle[];
   playingUrl: string | null;
-  onPlay: (url: string) => void;
+  loadingUrl: string | null;
+  onPlay: (article: SubstackArticle) => void;
+  onOpenArticle: (article: SubstackArticle) => void;
   loading?: boolean;
 }
 
@@ -32,7 +34,9 @@ export function ArticlesSection({
   title,
   articles,
   playingUrl,
+  loadingUrl,
   onPlay,
+  onOpenArticle,
   loading = false,
 }: ArticlesSectionProps) {
   if (!loading && articles.length === 0) return null;
@@ -51,7 +55,9 @@ export function ArticlesSection({
                 key={article.link}
                 {...article}
                 isPlaying={playingUrl === article.link}
-                onPlay={() => onPlay(article.link)}
+                isLoading={loadingUrl === article.link}
+                onPlay={() => onPlay(article)}
+                onOpenArticle={() => onOpenArticle(article)}
               />
             ))}
       </div>

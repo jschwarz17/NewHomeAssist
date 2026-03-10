@@ -9,6 +9,8 @@ export interface ArtistItem {
   spotifyId: string | null;
   spotifyTrackUri: string | null;
   imageUrl: string | null;
+  breakoutYear: string | null;
+  tractionSummary: string | null;
 }
 
 export interface ArtistsResult {
@@ -17,47 +19,39 @@ export interface ArtistsResult {
   version: number;
 }
 
-const ARTISTS_SYSTEM_PROMPT = `You are Grok, helping to curate a list of the top 10 most interesting new indie rock artists. The user likes Radiohead, Foals, and Queens of the Stone Age (QOTSA) as reference points. These bands are known for their experimental sound, complex arrangements, atmospheric textures, and dynamic shifts.
+const ARTISTS_SYSTEM_PROMPT = `You are Grok, curating new indie rock artists for a user who likes textured, adventurous guitar music in the spirit of Radiohead, Foals, and Queens of the Stone Age.
 
-Your task: Recommend exactly 10 new indie rock artists (released music in the last 2-3 years) that would appeal to someone who likes Radiohead, Foals, and QOTSA. Focus on artists with:
-- Experimental or atmospheric elements
-- Complex, layered instrumentation
-- Dynamic range (quiet to loud)
-- Interesting production techniques
-- Unique vocal styles or instrumental approaches
+Return ONLY one valid JSON object and nothing else. Do not use markdown fences.
 
-For each artist, provide:
-1. Artist name
-2. A 2-3 sentence description explaining why they're interesting and how they relate to the reference bands
-3. Genre tags (e.g., "indie rock", "post-rock", "art rock", "experimental rock")
-4. Spotify artist ID (if you can find it via web search)
-5. A specific track URI from Spotify (one song to preview - choose a representative track)
-6. Artist image URL (official photo or album art)
+Every recommendation must satisfy all of these rules:
+1. The artist is genuinely new or newly breaking out, not a legacy act.
+2. The artist gained meaningful traction on Spotify in the current calendar year or previous calendar year only. Use the real current date right now to determine the two-year window.
+3. The artist fits indie rock, art rock, post-punk, shoegaze, or adjacent guitar-driven scenes.
+4. Do NOT include long-established artists or bands that have been prominent for many years.
+5. Aim for exactly 10 artists.
 
-Output format (strictly follow this, no extra text, no lists outside the sections):
+Return this exact JSON shape:
+{
+  "artists": [
+    {
+      "name": "string",
+      "description": "2 concise sentences about the sound and why the artist fits.",
+      "genre": "comma-separated genres",
+      "spotifyId": "spotify:artist:..." or null,
+      "spotifyTrackUri": "spotify:track:..." or null,
+      "imageUrl": "https://..." or null,
+      "breakoutYear": "2026",
+      "tractionSummary": "1 short sentence explaining the recent Spotify momentum."
+    }
+  ]
+}`;
 
-ARTISTS
+const CACHE_VERSION = 2;
 
-Artist Name
-[Insert artist image URL here using Grok's image search/render capability]
-Description: [2-3 sentences about why this artist is interesting and how they relate to Radiohead/Foals/QOTSA]
-Genre: [comma-separated genres]
-Spotify Artist ID: [spotify:artist:XXXXX or null if not found]
-Spotify Track URI: [spotify:track:XXXXX - one representative song, or null if not found]
-
-(Repeat for all 10 artists)
-
-Never skip the ---JSON--- block. Always end your response with the ---JSON--- block containing every artist you listed.`;
-
-const CACHE_VERSION = 1;
-
-export type ParseFailureReason = "no_json_marker" | "no_brace" | "json_parse_error" | "empty_artists";
+export type ParseFailureReason = "no_brace" | "json_parse_error" | "empty_artists";
 
 function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: ParseFailureReason } {
-  const jsonMarker = "---JSON---";
-  const idx = raw.indexOf(jsonMarker);
-  if (idx === -1) return { error: "no_json_marker" };
-  let jsonStr = raw.slice(idx + jsonMarker.length).replace(/^[\s\n]+/, "").trim();
+  let jsonStr = raw.trim();
   jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
   const firstBrace = jsonStr.indexOf("{");
   if (firstBrace === -1) return { error: "no_brace" };
@@ -100,7 +94,7 @@ function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: Pa
   
   // If we didn't find a complete object, try to extract what we can
   if (depth !== 0) {
-    let lastBrace = jsonStr.lastIndexOf("}");
+    const lastBrace = jsonStr.lastIndexOf("}");
     if (lastBrace > firstBrace) {
       const potentialSlice = jsonStr.slice(firstBrace, lastBrace + 1);
       try {
@@ -131,6 +125,8 @@ function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: Pa
       spotifyId?: string | null;
       spotifyTrackUri?: string | null;
       imageUrl?: string | null;
+      breakoutYear?: string | null;
+      tractionSummary?: string | null;
     }>;
   };
   try {
@@ -153,6 +149,8 @@ function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: Pa
       spotifyId?: string | null;
       spotifyTrackUri?: string | null;
       imageUrl?: string | null;
+      breakoutYear?: string | null;
+      tractionSummary?: string | null;
     }
   ): ArtistItem => ({
     name: o.name ?? "",
@@ -161,6 +159,8 @@ function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: Pa
     spotifyId: o.spotifyId && o.spotifyId.startsWith("spotify:artist:") ? o.spotifyId : null,
     spotifyTrackUri: o.spotifyTrackUri && o.spotifyTrackUri.startsWith("spotify:track:") ? o.spotifyTrackUri : null,
     imageUrl: o.imageUrl && o.imageUrl.startsWith("http") ? o.imageUrl : null,
+    breakoutYear: o.breakoutYear ?? null,
+    tractionSummary: o.tractionSummary ?? null,
   });
   const artists: ArtistItem[] = (obj.artists ?? []).map((o) => toItem(o));
   if (artists.length === 0) return { error: "empty_artists" };
@@ -179,7 +179,11 @@ async function callGrokAndParse(apiKey: string): Promise<ArtistsResult> {
       tools: [{ type: "web_search" }],
       input: [
         { role: "system", content: ARTISTS_SYSTEM_PROMPT },
-        { role: "user", content: "Generate my top 10 indie rock artist recommendations now. Use Radiohead, Foals, and Queens of the Stone Age as reference points. For each artist, find their Spotify artist ID and a representative track URI. Output the 10 artists in the format specified, then the ---JSON--- block with all details." },
+        {
+          role: "user",
+          content:
+            "Generate the artist recommendations now. Return JSON only with 10 new indie rock artists whose Spotify breakout happened in the current or previous calendar year.",
+        },
       ],
     }),
   });
@@ -211,13 +215,11 @@ async function callGrokAndParse(apiKey: string): Promise<ArtistsResult> {
     const reason = parsed.error;
     const snippet = raw.length > 800 ? raw.slice(-800) : raw;
     const msg =
-      reason === "no_json_marker"
-        ? "Grok did not include ---JSON--- block in response"
-        : reason === "no_brace"
-          ? "Grok's ---JSON--- block had no JSON object"
-          : reason === "json_parse_error"
-            ? "Grok's JSON after ---JSON--- failed to parse"
-            : "Grok returned empty artists array";
+      reason === "no_brace"
+        ? "Grok's response had no JSON object"
+        : reason === "json_parse_error"
+          ? "Grok's JSON response failed to parse"
+          : "Grok returned empty artists array";
     throw new Error(
       `Grok did not return valid structured data: ${msg}. Raw tail: ${snippet.replace(/\n/g, " ").slice(0, 400)}`
     );

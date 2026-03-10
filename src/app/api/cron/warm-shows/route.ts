@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initShowsCacheTable, setShowsCache } from "@/lib/shows-cache";
 import { fetchRecommendationsFromGrok } from "@/lib/shows-recommendations-grok";
+import { buildRecommendationsResult } from "@/lib/shows-recommendations-utils";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   try {
     await initShowsCacheTable();
-    const result = await fetchRecommendationsFromGrok(apiKey);
+    const result = buildRecommendationsResult(await fetchRecommendationsFromGrok(apiKey));
     await setShowsCache({
       shows: result.shows,
       movies: result.movies,

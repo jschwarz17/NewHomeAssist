@@ -16,6 +16,8 @@ export interface ArtistItem {
   spotifyId: string | null;
   spotifyTrackUri: string | null;
   imageUrl: string | null;
+  breakoutYear: string | null;
+  tractionSummary: string | null;
 }
 
 export interface ArtistSectionItem extends ArtistItem {
@@ -37,7 +39,7 @@ interface LocalCacheEntry {
   cachedAt: number;
 }
 
-const CACHE_KEY = "artists_cache_v2";
+const CACHE_KEY = "artists_cache_v3";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ArtistsContext = createContext<ArtistsContextValue | null>(null);
@@ -66,7 +68,8 @@ function isUsableArtistItem(item: unknown): item is ArtistItem {
   return Boolean(
     candidate.name?.trim() &&
       candidate.description?.trim() &&
-      candidate.genre?.trim()
+      candidate.genre?.trim() &&
+      candidate.breakoutYear?.trim()
   );
 }
 

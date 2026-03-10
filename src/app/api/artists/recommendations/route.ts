@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
-import { CURATED_ARTISTS, CURATED_ARTISTS_VERSION } from "@/lib/curated-artists";
+import { CURATED_ARTISTS } from "@/lib/curated-artists";
 import type { ArtistItem } from "@/lib/artists-recommendations-grok";
+import { fetchArtistsFromGrok } from "@/lib/artists-recommendations-grok";
+import { getArtistsCache, initArtistsCacheTable, setArtistsCache } from "@/lib/artists-cache";
+import {
+  ARTISTS_ROUTE_VERSION,
+  buildArtistsResult,
+  hasCompleteArtistCount,
+  mergeArtistSources,
+} from "@/lib/artists-recommendations-utils";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,11 +23,74 @@ const CORS_HEADERS = {
 export type { ArtistItem } from "@/lib/artists-recommendations-grok";
 
 export async function GET() {
+  const fallback = buildArtistsResult({
+    artists: CURATED_ARTISTS as ArtistItem[],
+    cachedAt: Date.now(),
+    version: ARTISTS_ROUTE_VERSION,
+  });
+
+  let liveError: string | null = null;
+
+  try {
+    await initArtistsCacheTable();
+  } catch {
+    // Cache table creation is best-effort.
+  }
+
+  const freshCache = buildArtistsResult((await getArtistsCache()) ?? {});
+  if (hasCompleteArtistCount(freshCache)) {
+    return NextResponse.json(
+      {
+        ...freshCache,
+        source: "cache",
+      },
+      { headers: CORS_HEADERS }
+    );
+  }
+
+  const staleCache = buildArtistsResult(
+    (await getArtistsCache({ allowStale: true })) ?? {}
+  );
+
+  const apiKey = process.env.XAI_API_KEY;
+  if (apiKey) {
+    try {
+      const live = buildArtistsResult(await fetchArtistsFromGrok(apiKey));
+      const merged = mergeArtistSources([live, freshCache, staleCache, fallback]);
+
+      if (merged.artists.length > 0) {
+        try {
+          await setArtistsCache({
+            artists: merged.artists,
+            cachedAt: merged.cachedAt,
+            version: merged.version,
+          });
+        } catch {
+          // Cache writes are best-effort.
+        }
+
+        return NextResponse.json(
+          {
+            ...merged,
+            source: "live",
+          },
+          { headers: CORS_HEADERS }
+        );
+      }
+    } catch (error) {
+      liveError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  const mergedFallback = mergeArtistSources([freshCache, staleCache, fallback]);
+
   return NextResponse.json(
     {
-      artists: CURATED_ARTISTS as ArtistItem[],
-      cachedAt: Date.now(),
-      version: CURATED_ARTISTS_VERSION,
+      ...mergedFallback,
+      source: staleCache.artists.length ? "stale-cache" : "fallback",
+      notice: liveError
+        ? `Live refresh failed, so Ara is showing the last good recent artists instead. ${liveError}`
+        : undefined,
     },
     { headers: CORS_HEADERS }
   );

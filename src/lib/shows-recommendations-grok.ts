@@ -27,51 +27,53 @@ export interface RecommendationsResult {
   version: number;
 }
 
-const ARA_SYSTEM_PROMPT = `You are Ara, my personal curator for gritty, edgy, fast-paced, non-woke TV shows and movies. I only want the vibe of: Ozark, Caught Stealing, the German Netflix show Unfamiliar, Barry (dark, weird, edgy humor), and movies like The Social Network. Think intense pacing, morally gray characters, dark themes, sharp dialogue, no preaching, no forced diversity lectures, no social-justice messaging — just raw, smart, cynical, high-stakes storytelling. Also brilliant, quirky, layered comedies with sharp, absurd, dysfunctional family or character humor like Arrested Development — think clever meta jokes, eccentric weirdos, rapid-fire wit, and dark/understated edge without any preachiness. For comedies, 2-3 comedies among the total 20 recommendations.
+const ARA_SYSTEM_PROMPT = `You are Ara, curating TV and movie recommendations for a user who likes gritty thrillers, sharp dark comedies, and fast-paced prestige streaming releases.
 
-Your task: Recommend ONLY shows and movies that (1) were released in the current calendar year or the previous calendar year (check the actual current date right now to know what "this year" and "last year" are — do NOT use 2025/2026 if the date has changed), (2) are already available to stream right now on major platforms (Netflix, Prime Video, Hulu, Max, Disney+, Apple TV+, Paramount+, etc.), and (3) perfectly match the gritty/edgy/non-woke vibe above.
+Return ONLY one valid JSON object and nothing else. Do not use markdown fences.
 
-Aim for 10 TV shows and 10 movies (20 total). If you cannot find that many that fit every rule, provide as many as you can (at least 5 shows and 5 movies) — you must still output the ---JSON--- block at the end with whatever you have. Never skip the ---JSON--- block.
+Use the actual current date right now to determine the allowed release window. Every recommendation must satisfy all of these rules:
+1. It was released in the current calendar year or previous calendar year only.
+2. It is already available to stream right now on a major streaming platform.
+3. It fits the user's taste for gritty, intense, sharp, or darkly funny storytelling.
+4. Prefer a mix of U.S. and international titles.
+5. Aim for exactly 10 shows and 10 movies.
 
-Among your recommendations, about 5 should be European productions (Germany, UK, France, Spain, Scandinavia, Eastern Europe, etc. — clearly label the country); the rest American.
-
-Output format (strictly follow this, no extra text, no lists outside the sections):
-
-TV SHOWS
-
-Title (Year) — Country
-[Insert official main poster image here using Grok's image search/render capability — only the real poster, large and clear]
-3-line description:
-Line 1: One-sentence hook.
-Line 2: Why it's gritty/edgy/fast and matches my vibe.
-Line 3: Current streaming platform(s).
-
-(Repeat exactly the same format for 2–10)
-
-MOVIES
-
-Title (Year) — Country
-[Insert official main poster image here using Grok's image search/render capability — only the real poster, large and clear]
-3-line description:
-Line 1: One-sentence hook.
-Line 2: Why it's gritty/edgy/fast and matches my vibe.
-Line 3: Current streaming platform(s).
-
-(Repeat the same format for each additional item)
-
-Never recommend anything older than the two-year window, never recommend anything not currently streaming, never add woke titles, never pad the list. Always end your response with the ---JSON--- block containing every show and movie you listed.
-
-IMPORTANT: For each item, include the direct poster image URL on the line immediately after the "Title (Year) — Country" line (use web search to find the real poster image URL). After the last movie, on a new line write exactly ---JSON--- and then a valid JSON object with two keys: "shows" and "movies". Each show/movie in those arrays must have: "title", "year", "country", "posterUrl" (the direct image URL string, or null if not found), "description" (the three description lines merged into one string), "streamingService" (e.g. Netflix, Prime Video). No other text after the JSON.`;
+Return this exact JSON shape:
+{
+  "shows": [
+    {
+      "title": "string",
+      "year": "2026",
+      "country": "string",
+      "posterUrl": "https://..." or null,
+      "description": "2 concise sentences merged into one paragraph.",
+      "streamingService": "Netflix",
+      "genre": "string",
+      "language": "string",
+      "mood": "fun|gritty|quirky|funny|suspenseful"
+    }
+  ],
+  "movies": [
+    {
+      "title": "string",
+      "year": "2026",
+      "country": "string",
+      "posterUrl": "https://..." or null,
+      "description": "2 concise sentences merged into one paragraph.",
+      "streamingService": "Netflix",
+      "genre": "string",
+      "language": "string",
+      "mood": "fun|gritty|quirky|funny|suspenseful"
+    }
+  ]
+}`;
 
 const CACHE_VERSION = 4;
 
-export type ParseFailureReason = "no_json_marker" | "no_brace" | "json_parse_error" | "empty_shows";
+export type ParseFailureReason = "no_brace" | "json_parse_error" | "empty_shows";
 
 function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[] } | { error: ParseFailureReason } {
-  const jsonMarker = "---JSON---";
-  const idx = raw.indexOf(jsonMarker);
-  if (idx === -1) return { error: "no_json_marker" };
-  let jsonStr = raw.slice(idx + jsonMarker.length).replace(/^[\s\n]+/, "").trim();
+  let jsonStr = raw.trim();
   jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
   const firstBrace = jsonStr.indexOf("{");
   if (firstBrace === -1) return { error: "no_brace" };
@@ -143,8 +145,28 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
   }
   
   let obj: {
-    shows?: Array<{ title?: string; year?: string; country?: string; posterUrl?: string | null; description?: string; streamingService?: string }>;
-    movies?: Array<{ title?: string; year?: string; country?: string; posterUrl?: string | null; description?: string; streamingService?: string }>;
+    shows?: Array<{
+      title?: string;
+      year?: string;
+      country?: string;
+      posterUrl?: string | null;
+      description?: string;
+      streamingService?: string;
+      genre?: string;
+      language?: string;
+      mood?: ShowMood;
+    }>;
+    movies?: Array<{
+      title?: string;
+      year?: string;
+      country?: string;
+      posterUrl?: string | null;
+      description?: string;
+      streamingService?: string;
+      genre?: string;
+      language?: string;
+      mood?: ShowMood;
+    }>;
   };
   try {
     obj = JSON.parse(slice) as typeof obj;
@@ -161,20 +183,30 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
   }
   const toItem = (
     t: "show" | "movie",
-    o: { title?: string; year?: string; country?: string; posterUrl?: string | null; description?: string; streamingService?: string }
+    o: {
+      title?: string;
+      year?: string;
+      country?: string;
+      posterUrl?: string | null;
+      description?: string;
+      streamingService?: string;
+      genre?: string;
+      language?: string;
+      mood?: ShowMood;
+    }
   ): ShowItem => ({
     title: o.title ?? "",
     year: String(o.year ?? ""),
     type: t,
     description: o.description ?? "",
-    genre: t === "movie" ? "Thriller" : "Drama",
+    genre: o.genre ?? (t === "movie" ? "Thriller" : "Drama"),
     country: o.country ?? "USA",
-    language: o.country === "USA" ? "English" : "Various",
+    language: o.language ?? (o.country === "USA" ? "English" : "Various"),
     streamingService: o.streamingService ?? "",
     tmdbSearchTitle: o.title ?? "",
     trailerSearchQuery: `${o.title ?? ""} ${o.year ?? ""} Official Trailer`.trim(),
     trailerVideoId: null,
-    mood: "gritty" as ShowMood,
+    mood: o.mood ?? ("gritty" as ShowMood),
     posterUrl: o.posterUrl && o.posterUrl.startsWith("http") ? o.posterUrl : null,
   });
   const shows: ShowItem[] = (obj.shows ?? []).map((o) => toItem("show", o));
@@ -195,7 +227,11 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
       tools: [{ type: "web_search" }],
       input: [
         { role: "system", content: ARA_SYSTEM_PROMPT },
-        { role: "user", content: "Generate my recommendations now. Use the current date to determine this year and last year. Output the 20 items in the format specified, then the ---JSON--- block with posterUrl for each." },
+        {
+          role: "user",
+          content:
+            "Generate the recommendations now. Return JSON only with 10 shows and 10 movies if possible, using the current calendar year and previous calendar year window.",
+        },
       ],
     }),
   });
@@ -226,13 +262,11 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
     const reason = parsed.error;
     const snippet = raw.length > 800 ? raw.slice(-800) : raw;
     const msg =
-      reason === "no_json_marker"
-        ? "Grok did not include ---JSON--- block in response"
-        : reason === "no_brace"
-          ? "Grok's ---JSON--- block had no JSON object"
-          : reason === "json_parse_error"
-            ? "Grok's JSON after ---JSON--- failed to parse"
-            : "Grok returned empty shows array";
+      reason === "no_brace"
+        ? "Grok's response had no JSON object"
+        : reason === "json_parse_error"
+          ? "Grok's JSON response failed to parse"
+          : "Grok returned empty shows array";
     throw new Error(
       `Grok did not return valid structured data: ${msg}. Raw tail: ${snippet.replace(/\n/g, " ").slice(0, 400)}`
     );

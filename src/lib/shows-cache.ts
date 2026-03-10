@@ -6,7 +6,6 @@
 import { neon } from "@neondatabase/serverless";
 
 const CACHE_KEY = "default";
-const TTL_HOURS = 24;
 
 function getSql() {
   const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
@@ -33,18 +32,28 @@ export async function initShowsCacheTable(): Promise<void> {
   `;
 }
 
-/** Returns cached payload if present and younger than TTL_HOURS; otherwise null. */
-export async function getShowsCache(): Promise<CachedShowsPayload | null> {
+/** Returns cached payload if present. By default, require it to be younger than TTL_HOURS. */
+export async function getShowsCache(options?: {
+  allowStale?: boolean;
+}): Promise<CachedShowsPayload | null> {
   const sql = getSql();
   if (!sql) return null;
   try {
-    const rows = await sql`
-      SELECT data, cached_at
-      FROM shows_recommendations_cache
-      WHERE key = ${CACHE_KEY}
-        AND cached_at > NOW() - INTERVAL '24 hours'
-      LIMIT 1
-    `;
+    const rows = options?.allowStale
+      ? await sql`
+          SELECT data, cached_at
+          FROM shows_recommendations_cache
+          WHERE key = ${CACHE_KEY}
+          ORDER BY cached_at DESC
+          LIMIT 1
+        `
+      : await sql`
+          SELECT data, cached_at
+          FROM shows_recommendations_cache
+          WHERE key = ${CACHE_KEY}
+            AND cached_at > NOW() - INTERVAL '24 hours'
+          LIMIT 1
+        `;
     const row = Array.isArray(rows) ? rows[0] : null;
     if (!row || !row.data) return null;
     const data = row.data as Record<string, unknown>;
