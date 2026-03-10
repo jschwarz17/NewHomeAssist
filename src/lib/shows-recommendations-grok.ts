@@ -69,6 +69,7 @@ Return this exact JSON shape:
 }`;
 
 const CACHE_VERSION = 4;
+const GROK_CHAT_URL = "https://api.x.ai/v1/chat/completions";
 
 export type ParseFailureReason = "no_brace" | "json_parse_error" | "empty_shows";
 
@@ -222,7 +223,7 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch("https://api.x.ai/v1/responses", {
+    res = await fetch(GROK_CHAT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -230,8 +231,10 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
       },
       signal: controller.signal,
       body: JSON.stringify({
-        model: "grok-4-1-fast",
-        input: [
+        model: process.env.GROK_MODEL ?? "grok-3-mini",
+        temperature: 0.2,
+        max_tokens: 4000,
+        messages: [
           { role: "system", content: ARA_SYSTEM_PROMPT },
           {
             role: "user",
@@ -250,7 +253,7 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
     throw new Error(`Grok API error: ${res.status} — ${bodyText.slice(0, 200)}`);
   }
 
-  let data: { output?: unknown[] };
+  let data: { choices?: Array<{ message?: { content?: string } }> };
   try {
     data = bodyText ? JSON.parse(bodyText) : {};
   } catch {
@@ -259,12 +262,7 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
     );
   }
 
-  type OutputItem = { type: string; content?: { type: string; text: string }[] };
-  const messageItem = (data.output as OutputItem[] | undefined)?.find((o) => o.type === "message");
-  const contentBlocks = messageItem?.content ?? [];
-  const outputTextBlocks = contentBlocks.filter((c): c is { type: string; text: string } => c.type === "output_text");
-  // Join all output_text blocks in case the response is split across multiple blocks
-  const raw = outputTextBlocks.map((b) => b.text).join("\n");
+  const raw = data.choices?.[0]?.message?.content?.trim() ?? "";
 
   const parsed = parseGrokResponse(raw);
   if ("error" in parsed) {
