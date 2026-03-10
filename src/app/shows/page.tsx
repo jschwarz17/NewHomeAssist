@@ -5,6 +5,7 @@ import { useYouTube } from "@/context/YouTubeContext";
 import { useShows, type ShowMood } from "@/context/ShowsContext";
 import { ShowsSection } from "@/components/shows/ShowsSection";
 import type { ShowsSectionItem } from "@/context/ShowsContext";
+import { openLink } from "@/lib/open-link";
 
 type Filter = "all" | ShowMood | "intl";
 
@@ -45,6 +46,10 @@ export default function ShowsPage() {
   const handlePlayTrailer = useCallback(
     async (item: ShowsSectionItem) => {
       if (loadingTrailerId) return;
+      if (item.trailerVideoId) {
+        playVideo(item.trailerVideoId, `${item.title} — Trailer`);
+        return;
+      }
       setLoadingTrailerId(item.id);
 
       try {
@@ -73,6 +78,13 @@ export default function ShowsPage() {
     },
     [loadingTrailerId, playVideo]
   );
+
+  const handleOpenTrailer = useCallback(async (item: ShowsSectionItem) => {
+    const url = item.trailerVideoId
+      ? `https://www.youtube.com/watch?v=${item.trailerVideoId}`
+      : `https://www.youtube.com/results?search_query=${encodeURIComponent(item.trailerSearchQuery)}`;
+    await openLink(url);
+  }, []);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId((prev) => (prev === id ? null : id));
@@ -133,6 +145,7 @@ export default function ShowsPage() {
               loadingTrailerId={loadingTrailerId}
               onSelect={handleSelect}
               onPlayTrailer={handlePlayTrailer}
+              onOpenTrailer={handleOpenTrailer}
               loading={loading}
             />
             <ShowsSection
@@ -142,6 +155,7 @@ export default function ShowsPage() {
               loadingTrailerId={loadingTrailerId}
               onSelect={handleSelect}
               onPlayTrailer={handlePlayTrailer}
+              onOpenTrailer={handleOpenTrailer}
               loading={loading}
             />
           </>

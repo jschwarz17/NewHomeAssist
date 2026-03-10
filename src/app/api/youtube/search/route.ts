@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CURATED_MOVIES, CURATED_SHOWS } from "@/lib/curated-shows";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,18 @@ export async function POST(req: NextRequest) {
     const query = (body.query as string)?.trim();
     if (!query) {
       return json({ success: false, message: "Missing query" }, 400);
+    }
+
+    const normalizedQuery = query.toLowerCase();
+    const curatedMatch = [...CURATED_SHOWS, ...CURATED_MOVIES].find((item) =>
+      normalizedQuery.includes(item.title.toLowerCase())
+    );
+    if (curatedMatch?.trailerVideoId) {
+      return json({
+        success: true,
+        videoId: curatedMatch.trailerVideoId,
+        title: `${curatedMatch.title} — Trailer`,
+      });
     }
 
     const apiKey = process.env.YOUTUBE_API_KEY;

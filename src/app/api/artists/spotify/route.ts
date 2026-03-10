@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CURATED_ARTISTS } from "@/lib/curated-artists";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 15;
 
 const spotifyCache = new Map<string, { spotifyId: string; spotifyTrackUri: string | null }>();
+
+interface SpotifyArtistSearchResult {
+  id: string;
+  name: string;
+}
 
 async function getClientToken(): Promise<string> {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
@@ -39,6 +45,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ spotifyId: null, spotifyTrackUri: null });
   }
 
+  const curatedArtist = CURATED_ARTISTS.find(
+    (artist) => artist.name.toLowerCase() === name.toLowerCase()
+  );
+  if (curatedArtist?.spotifyId || curatedArtist?.spotifyTrackUri) {
+    return NextResponse.json({
+      spotifyId: curatedArtist.spotifyId,
+      spotifyTrackUri: curatedArtist.spotifyTrackUri,
+    });
+  }
+
   const cacheKey = name.toLowerCase();
   if (spotifyCache.has(cacheKey)) {
     const cached = spotifyCache.get(cacheKey)!;
@@ -58,7 +74,7 @@ export async function GET(req: NextRequest) {
     }
 
     const searchData = await searchRes.json();
-    const artist = searchData.artists?.items?.[0];
+    const artist = searchData.artists?.items?.[0] as SpotifyArtistSearchResult | undefined;
     if (!artist) {
       return NextResponse.json({ spotifyId: null, spotifyTrackUri: null });
     }
@@ -75,6 +91,25 @@ export async function GET(req: NextRequest) {
       const tracksData = await tracksRes.json();
       const track = tracksData.tracks?.[0];
       spotifyTrackUri = track?.uri ?? null;
+    }
+
+    if (!spotifyTrackUri) {
+      const encodedArtist = encodeURIComponent(`artist:${artist.name}`);
+      const trackSearchRes = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodedArtist}&type=track&limit=10`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (trackSearchRes.ok) {
+        const trackSearchData = await trackSearchRes.json();
+        const matchingTrack = trackSearchData.tracks?.items?.find(
+          (track: {
+            uri?: string;
+            artists?: Array<{ id?: string }>;
+          }) => track.artists?.some((trackArtist) => trackArtist.id === artist.id)
+        );
+        spotifyTrackUri = matchingTrack?.uri ?? null;
+      }
     }
 
     spotifyCache.set(cacheKey, { spotifyId, spotifyTrackUri });

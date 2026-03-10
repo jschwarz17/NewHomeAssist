@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import { useArtists } from "@/context/ArtistsContext";
 import { ArtistsSection } from "@/components/artists/ArtistsSection";
-import type { ArtistSectionItem } from "@/context/ArtistsContext";
 
 export default function ArtistsPage() {
   const { artists, loading, error, refresh } = useArtists();

@@ -10,6 +10,7 @@ interface ShowsSectionProps {
   loadingTrailerId: string | null;
   onSelect: (id: string) => void;
   onPlayTrailer: (item: ShowsSectionItem) => void;
+  onOpenTrailer: (item: ShowsSectionItem) => void;
   loading?: boolean;
 }
 
@@ -35,6 +36,7 @@ export function ShowsSection({
   loadingTrailerId,
   onSelect,
   onPlayTrailer,
+  onOpenTrailer,
   loading = false,
 }: ShowsSectionProps) {
   if (!loading && items.length === 0) return null;
@@ -55,6 +57,7 @@ export function ShowsSection({
                 isSelected={selectedId === item.id}
                 onSelect={() => onSelect(item.id)}
                 onPlayTrailer={() => onPlayTrailer(item)}
+                onOpenTrailer={() => onOpenTrailer(item)}
                 isLoadingTrailer={loadingTrailerId === item.id}
               />
             ))}

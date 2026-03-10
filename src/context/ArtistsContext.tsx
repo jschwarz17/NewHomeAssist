@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { CURATED_ARTISTS } from "@/lib/curated-artists";
 
 export interface ArtistItem {
   name: string;
@@ -36,7 +37,7 @@ interface LocalCacheEntry {
   cachedAt: number;
 }
 
-const CACHE_KEY = "artists_cache_v1";
+const CACHE_KEY = "artists_cache_v2";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ArtistsContext = createContext<ArtistsContextValue | null>(null);
@@ -59,12 +60,32 @@ function toSectionItem(item: ArtistItem, index: number): ArtistSectionItem {
   };
 }
 
+function isUsableArtistItem(item: unknown): item is ArtistItem {
+  if (!item || typeof item !== "object") return false;
+  const candidate = item as Partial<ArtistItem>;
+  return Boolean(
+    candidate.name?.trim() &&
+      candidate.description?.trim() &&
+      candidate.genre?.trim()
+  );
+}
+
+function getFallbackArtists(): ArtistSectionItem[] {
+  return CURATED_ARTISTS.map((artist, index) => toSectionItem(artist, index));
+}
+
 function readLocalCache(): LocalCacheEntry | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry: LocalCacheEntry = JSON.parse(raw);
-    if (Date.now() - entry.cachedAt < CACHE_TTL_MS) return entry;
+    if (
+      Date.now() - entry.cachedAt < CACHE_TTL_MS &&
+      Array.isArray(entry.artists) &&
+      entry.artists.every(isUsableArtistItem)
+    ) {
+      return entry;
+    }
   } catch {
     // ignore parse errors
   }
@@ -121,7 +142,11 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
       )
       .then((data: { artists: ArtistItem[] }) => {
         clearTimeout(timeoutId);
-        const artistItems = (data.artists ?? []).map((a, i) => toSectionItem(a, i));
+        const sourceArtists =
+          Array.isArray(data.artists) && data.artists.every(isUsableArtistItem)
+            ? data.artists
+            : CURATED_ARTISTS;
+        const artistItems = sourceArtists.map((a, i) => toSectionItem(a, i));
 
         const cacheEntry: LocalCacheEntry = {
           artists: artistItems,
@@ -138,22 +163,20 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
       .catch((e) => {
         clearTimeout(timeoutId);
         console.error("[artists] recommendations error:", e);
-        const errorMessage = e.name === "AbortError" 
-          ? "Request timed out. Please try again."
-          : typeof e === "string" 
-            ? e 
-            : "Couldn't load artists. Please try again.";
-        setState((prev) => ({
-          ...prev,
+        setState({
+          artists: getFallbackArtists(),
           loading: false,
-          error: errorMessage,
-        }));
+          error: null,
+        });
       });
   }, []);
 
   // Kick off fetch immediately when provider mounts (app start)
   useEffect(() => {
-    fetchData();
+    const timeoutId = window.setTimeout(() => {
+      fetchData();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
 
   const refresh = useCallback(() => {
