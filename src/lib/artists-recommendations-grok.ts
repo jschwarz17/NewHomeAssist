@@ -37,9 +37,9 @@ Return this exact JSON shape:
       "name": "string",
       "description": "2 concise sentences about the sound and why the artist fits.",
       "genre": "comma-separated genres",
-      "spotifyId": "spotify:artist:..." or null,
-      "spotifyTrackUri": "spotify:track:..." or null,
-      "imageUrl": "https://..." or null,
+      "spotifyId": null,
+      "spotifyTrackUri": null,
+      "imageUrl": null,
       "breakoutYear": "2026",
       "tractionSummary": "1 short sentence explaining the recent Spotify momentum."
     }
@@ -167,26 +167,35 @@ function parseGrokResponse(raw: string): { artists: ArtistItem[] } | { error: Pa
   return { artists };
 }
 
+const REQUEST_TIMEOUT_MS = 20000;
+
 async function callGrokAndParse(apiKey: string): Promise<ArtistsResult> {
-  const res = await fetch("https://api.x.ai/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "grok-4-1-fast",
-      tools: [{ type: "web_search" }],
-      input: [
-        { role: "system", content: ARTISTS_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content:
-            "Generate the artist recommendations now. Return JSON only with 10 new indie rock artists whose Spotify breakout happened in the current or previous calendar year.",
-        },
-      ],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch("https://api.x.ai/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: "grok-4-1-fast",
+        input: [
+          { role: "system", content: ARTISTS_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content:
+              "Generate the artist recommendations now. Use your built-in knowledge only. Return JSON only with 10 new indie rock artists whose Spotify breakout happened in the current or previous calendar year.",
+          },
+        ],
+      }),
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const bodyText = await res.text();
   if (!res.ok) {
@@ -238,6 +247,9 @@ export async function fetchArtistsFromGrok(apiKey: string): Promise<ArtistsResul
     return await callGrokAndParse(apiKey);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Grok artists request timed out");
+    }
     if (message.includes("Grok did not return valid structured data") && message.includes("Raw tail:")) {
       console.warn("[artists-recommendations-grok] First attempt failed, retrying once...");
       return await callGrokAndParse(apiKey);

@@ -45,7 +45,7 @@ Return this exact JSON shape:
       "title": "string",
       "year": "2026",
       "country": "string",
-      "posterUrl": "https://..." or null,
+      "posterUrl": null,
       "description": "2 concise sentences merged into one paragraph.",
       "streamingService": "Netflix",
       "genre": "string",
@@ -58,7 +58,7 @@ Return this exact JSON shape:
       "title": "string",
       "year": "2026",
       "country": "string",
-      "posterUrl": "https://..." or null,
+      "posterUrl": null,
       "description": "2 concise sentences merged into one paragraph.",
       "streamingService": "Netflix",
       "genre": "string",
@@ -215,26 +215,35 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
   return { shows, movies };
 }
 
+const REQUEST_TIMEOUT_MS = 20000;
+
 async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> {
-  const res = await fetch("https://api.x.ai/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "grok-4-1-fast",
-      tools: [{ type: "web_search" }],
-      input: [
-        { role: "system", content: ARA_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content:
-            "Generate the recommendations now. Return JSON only with 10 shows and 10 movies if possible, using the current calendar year and previous calendar year window.",
-        },
-      ],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch("https://api.x.ai/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: "grok-4-1-fast",
+        input: [
+          { role: "system", content: ARA_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content:
+              "Generate the recommendations now. Use your built-in knowledge only. Return JSON only with 10 shows and 10 movies if possible, using the current calendar year and previous calendar year window.",
+          },
+        ],
+      }),
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const bodyText = await res.text();
   if (!res.ok) {
@@ -286,6 +295,9 @@ export async function fetchRecommendationsFromGrok(apiKey: string): Promise<Reco
     return await callGrokAndParse(apiKey);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Grok recommendations request timed out");
+    }
     if (message.includes("Grok did not return valid structured data") && message.includes("Raw tail:")) {
       console.warn("[shows-recommendations-grok] First attempt failed, retrying once...");
       return await callGrokAndParse(apiKey);
