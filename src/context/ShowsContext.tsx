@@ -50,7 +50,7 @@ interface LocalCacheEntry {
   notice: string | null;
 }
 
-const CACHE_KEY = "shows_cache_v8";
+const CACHE_KEY = "shows_cache_v9";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ShowsContext = createContext<ShowsContextValue | null>(null);

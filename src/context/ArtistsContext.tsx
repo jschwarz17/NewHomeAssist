@@ -41,7 +41,7 @@ interface LocalCacheEntry {
   notice: string | null;
 }
 
-const CACHE_KEY = "artists_cache_v3";
+const CACHE_KEY = "artists_cache_v4";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ArtistsContext = createContext<ArtistsContextValue | null>(null);
