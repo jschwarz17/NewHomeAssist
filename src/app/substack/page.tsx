@@ -106,6 +106,8 @@ export default function SubstackPage() {
   const audioBlobUrlRef = useRef<string | null>(null);
   const playbackSessionRef = useRef(0);
   const playbackAbortRef = useRef<AbortController | null>(null);
+  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechUsingBrowserVoiceRef = useRef(false);
 
   const revokeAudioBlobUrl = useCallback(() => {
     if (!audioBlobUrlRef.current) return;
@@ -117,6 +119,12 @@ export default function SubstackPage() {
     playbackSessionRef.current += 1;
     playbackAbortRef.current?.abort();
     playbackAbortRef.current = null;
+    speechUsingBrowserVoiceRef.current = false;
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      speechUtteranceRef.current = null;
+    }
 
     if (audioRef.current) {
       audioRef.current.pause();
@@ -199,6 +207,63 @@ export default function SubstackPage() {
     });
   }, []);
 
+  const resolveBrowserVoice = useCallback((): SpeechSynthesisVoice | null => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length === 0) return null;
+
+    const preferredName = voices.find(
+      (voice) =>
+        /en/i.test(voice.lang) &&
+        /(female|zira|samantha|ava|aria|jenny|alloy|nova|luna)/i.test(voice.name)
+    );
+    if (preferredName) return preferredName;
+
+    const preferredLang = voices.find((voice) => /^en[-_]/i.test(voice.lang));
+    return preferredLang ?? voices[0] ?? null;
+  }, []);
+
+  const waitForSpeechToFinish = useCallback((utterance: SpeechSynthesisUtterance) => {
+    return new Promise<void>((resolve, reject) => {
+      const handleEnd = () => {
+        utterance.removeEventListener("end", handleEnd);
+        utterance.removeEventListener("error", handleError);
+        speechUtteranceRef.current = null;
+        resolve();
+      };
+      const handleError = () => {
+        utterance.removeEventListener("end", handleEnd);
+        utterance.removeEventListener("error", handleError);
+        speechUtteranceRef.current = null;
+        reject(new Error("Browser speech synthesis failed."));
+      };
+
+      utterance.addEventListener("end", handleEnd);
+      utterance.addEventListener("error", handleError);
+    });
+  }, []);
+
+  const speakChunkWithBrowserVoice = useCallback(
+    async (text: string) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+        throw new Error("Browser speech synthesis is unavailable.");
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      const voice = resolveBrowserVoice();
+      if (voice) {
+        utterance.voice = voice;
+      }
+
+      speechUtteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+      await waitForSpeechToFinish(utterance);
+    },
+    [resolveBrowserVoice, waitForSpeechToFinish]
+  );
+
   const handleOpenArticle = useCallback(
     async (article: SubstackArticle) => {
       try {
@@ -228,6 +293,9 @@ export default function SubstackPage() {
         const sessionId = playbackSessionRef.current;
         const audio = audioRef.current ?? new Audio();
         audioRef.current = audio;
+        audio.preload = "auto";
+        audio.volume = 1;
+        speechUsingBrowserVoiceRef.current = false;
 
         const chunks = splitTextForAra(
           `${loaded.title || article.title}. ${loaded.content}`
@@ -239,43 +307,76 @@ export default function SubstackPage() {
 
         setPlayingUrl(article.link);
 
+        let useBrowserVoiceFallback = false;
         for (let index = 0; index < chunks.length; index += 1) {
           if (playbackSessionRef.current !== sessionId) {
             return;
           }
 
-          setPlaybackStatus(`Ara is reading part ${index + 1} of ${chunks.length}`);
+          const chunkStatus = `Ara is reading part ${index + 1} of ${chunks.length}`;
+          setPlaybackStatus(
+            useBrowserVoiceFallback ? `${chunkStatus} (browser voice)` : chunkStatus
+          );
 
-          const controller = new AbortController();
-          playbackAbortRef.current = controller;
-
-          const response = await fetch(buildApiUrl("/api/substack/article-audio"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: chunks[index] }),
-            signal: controller.signal,
-          });
-
-          if (!response.ok) {
-            const data = (await response.json().catch(() => ({}))) as { error?: string };
-            throw new Error(data.error || "Ara could not generate audio for this article.");
+          if (useBrowserVoiceFallback) {
+            setLoadingUrl(null);
+            await speakChunkWithBrowserVoice(chunks[index]);
+            continue;
           }
 
-          const audioBlob = await response.blob();
-          if (playbackSessionRef.current !== sessionId) {
-            return;
-          }
+          try {
+            const controller = new AbortController();
+            playbackAbortRef.current = controller;
 
-          revokeAudioBlobUrl();
-          audioBlobUrlRef.current = URL.createObjectURL(audioBlob);
-          audio.src = audioBlobUrlRef.current;
-          setLoadingUrl(null);
-          await audio.play();
-          await waitForAudioToFinish(audio);
-          revokeAudioBlobUrl();
+            const response = await fetch(buildApiUrl("/api/substack/article-audio"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: chunks[index] }),
+              signal: controller.signal,
+            });
+            playbackAbortRef.current = null;
+
+            if (!response.ok) {
+              const data = (await response.json().catch(() => ({}))) as { error?: string };
+              throw new Error(data.error || "Ara voice is unavailable.");
+            }
+
+            const audioBlob = await response.blob();
+            if (!audioBlob.size) {
+              throw new Error("Ara voice returned empty audio.");
+            }
+            if (playbackSessionRef.current !== sessionId) {
+              return;
+            }
+
+            revokeAudioBlobUrl();
+            audioBlobUrlRef.current = URL.createObjectURL(audioBlob);
+            audio.src = audioBlobUrlRef.current;
+            setLoadingUrl(null);
+            await audio.play();
+            await waitForAudioToFinish(audio);
+            revokeAudioBlobUrl();
+          } catch (chunkError) {
+            if (chunkError instanceof DOMException && chunkError.name === "AbortError") {
+              throw chunkError;
+            }
+
+            useBrowserVoiceFallback = true;
+            speechUsingBrowserVoiceRef.current = true;
+            playbackAbortRef.current = null;
+
+            revokeAudioBlobUrl();
+            audio.pause();
+            audio.removeAttribute("src");
+
+            setPlaybackStatus(`${chunkStatus} (browser voice)`);
+            setLoadingUrl(null);
+            await speakChunkWithBrowserVoice(chunks[index]);
+          }
         }
 
         if (playbackSessionRef.current === sessionId) {
+          speechUsingBrowserVoiceRef.current = false;
           setPlayingUrl(null);
           setPlaybackStatus(null);
           setLoadingUrl(null);
@@ -291,7 +392,14 @@ export default function SubstackPage() {
         setModalLoading(false);
       }
     },
-    [loadArticle, playingUrl, revokeAudioBlobUrl, stopPlayback, waitForAudioToFinish]
+    [
+      loadArticle,
+      playingUrl,
+      revokeAudioBlobUrl,
+      speakChunkWithBrowserVoice,
+      stopPlayback,
+      waitForAudioToFinish,
+    ]
   );
 
   const handleCloseModal = useCallback(() => {
