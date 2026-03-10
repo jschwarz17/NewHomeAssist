@@ -14,11 +14,13 @@ export interface ShowCardProps {
   language: string;
   streamingService: string;
   posterUrl: string | null;
+  trailerVideoId: string | null;
   tmdbSearchTitle?: string;
   mood: ShowMood;
   isSelected: boolean;
   onSelect: () => void;
   onPlayTrailer: () => void;
+  onOpenTrailer: () => void;
   isLoadingTrailer: boolean;
 }
 
@@ -40,11 +42,13 @@ export function ShowCard({
   language,
   streamingService,
   posterUrl,
+  trailerVideoId,
   tmdbSearchTitle,
   mood,
   isSelected,
   onSelect,
   onPlayTrailer,
+  onOpenTrailer,
   isLoadingTrailer,
 }: ShowCardProps) {
   const [imgError, setImgError] = React.useState(false);
@@ -149,23 +153,35 @@ export function ShowCard({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="border-t border-zinc-800 pt-3">
-            <button
-              onClick={onPlayTrailer}
-              disabled={isLoadingTrailer}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 transition-colors text-white text-sm font-medium disabled:opacity-50"
-            >
-              {isLoadingTrailer ? (
-                <>
-                  <span className="h-3.5 w-3.5 rounded-full border-2 border-zinc-500 border-t-white animate-spin" />
-                  Finding trailer…
-                </>
-              ) : (
-                <>
-                  <span>▶</span>
-                  Play Trailer
-                </>
-              )}
-            </button>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button
+                onClick={onPlayTrailer}
+                disabled={isLoadingTrailer}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 transition-colors text-white text-sm font-medium disabled:opacity-50"
+              >
+                {isLoadingTrailer ? (
+                  <>
+                    <span className="h-3.5 w-3.5 rounded-full border-2 border-zinc-500 border-t-white animate-spin" />
+                    Finding trailer…
+                  </>
+                ) : (
+                  <>
+                    <span>▶</span>
+                    Play Trailer
+                  </>
+                )}
+              </button>
+              <button
+                onClick={onOpenTrailer}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-zinc-700 bg-zinc-950 hover:bg-zinc-900 active:bg-zinc-800 transition-colors text-zinc-200 text-sm font-medium"
+              >
+                <span>{trailerVideoId ? "↗" : "🔎"}</span>
+                {trailerVideoId ? "Open on YouTube" : "Search Trailer"}
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] text-zinc-500">
+              {streamingService} • {language}
+            </p>
           </div>
         </div>
       )}

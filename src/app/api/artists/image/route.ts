@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CURATED_ARTISTS } from "@/lib/curated-artists";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -53,7 +54,19 @@ export async function GET(req: NextRequest) {
   const name = req.nextUrl.searchParams.get("name")?.trim();
   const xaiKey = process.env.XAI_API_KEY;
 
-  if (!name || !xaiKey) {
+  if (!name) {
+    return NextResponse.json({ image: null });
+  }
+
+  const curatedImage =
+    CURATED_ARTISTS.find(
+      (artist) => artist.name.toLowerCase() === name.toLowerCase()
+    )?.imageUrl ?? null;
+  if (curatedImage) {
+    return NextResponse.json({ image: curatedImage });
+  }
+
+  if (!xaiKey) {
     return NextResponse.json({ image: null });
   }
 

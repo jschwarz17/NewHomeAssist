@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { CURATED_MOVIES, CURATED_SHOWS } from "@/lib/curated-shows";
 
 export type ShowMood = "fun" | "gritty" | "quirky" | "funny" | "suspenseful";
 
@@ -21,6 +22,7 @@ export interface ShowItem {
   streamingService: string;
   tmdbSearchTitle: string;
   trailerSearchQuery: string;
+  trailerVideoId: string | null;
   mood: ShowMood;
   posterUrl: string | null;
 }
@@ -46,7 +48,7 @@ interface LocalCacheEntry {
   cachedAt: number;
 }
 
-const CACHE_KEY = "shows_cache_v6";
+const CACHE_KEY = "shows_cache_v7";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const ShowsContext = createContext<ShowsContextValue | null>(null);
@@ -67,6 +69,26 @@ function toSectionItem(item: ShowItem, index: number): ShowsSectionItem {
     ...item,
     id: `${item.type}-${index}`,
     posterUrl: item.posterUrl ?? null,
+    trailerVideoId: item.trailerVideoId ?? null,
+  };
+}
+
+function isUsableShowItem(item: unknown): item is ShowItem {
+  if (!item || typeof item !== "object") return false;
+  const candidate = item as Partial<ShowItem>;
+  return Boolean(
+    candidate.title?.trim() &&
+      candidate.year?.trim() &&
+      candidate.description?.trim() &&
+      candidate.genre?.trim() &&
+      candidate.streamingService?.trim()
+  );
+}
+
+function getFallbackShows(): Pick<ShowsState, "shows" | "movies"> {
+  return {
+    shows: CURATED_SHOWS.map((show, index) => toSectionItem(show, index)),
+    movies: CURATED_MOVIES.map((movie, index) => toSectionItem(movie, index)),
   };
 }
 
@@ -75,7 +97,15 @@ function readLocalCache(): LocalCacheEntry | null {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const entry: LocalCacheEntry = JSON.parse(raw);
-    if (Date.now() - entry.cachedAt < CACHE_TTL_MS) return entry;
+    if (
+      Date.now() - entry.cachedAt < CACHE_TTL_MS &&
+      Array.isArray(entry.shows) &&
+      entry.shows.every(isUsableShowItem) &&
+      Array.isArray(entry.movies) &&
+      entry.movies.every(isUsableShowItem)
+    ) {
+      return entry;
+    }
   } catch {
     // ignore parse errors
   }
@@ -134,8 +164,16 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       )
       .then((data: { shows: ShowItem[]; movies: ShowItem[] }) => {
         clearTimeout(timeoutId);
-        const showItems = (data.shows ?? []).map((s, i) => toSectionItem(s, i));
-        const movieItems = (data.movies ?? []).map((m, i) => toSectionItem(m, i));
+        const sourceShows =
+          Array.isArray(data.shows) && data.shows.every(isUsableShowItem)
+            ? data.shows
+            : CURATED_SHOWS;
+        const sourceMovies =
+          Array.isArray(data.movies) && data.movies.every(isUsableShowItem)
+            ? data.movies
+            : CURATED_MOVIES;
+        const showItems = sourceShows.map((s, i) => toSectionItem(s, i));
+        const movieItems = sourceMovies.map((m, i) => toSectionItem(m, i));
 
         const cacheEntry: LocalCacheEntry = {
           shows: showItems,
@@ -154,22 +192,21 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       .catch((e) => {
         clearTimeout(timeoutId);
         console.error("[shows] recommendations error:", e);
-        const errorMessage = e.name === "AbortError" 
-          ? "Request timed out. Please try again."
-          : typeof e === "string" 
-            ? e 
-            : "Couldn't load recommendations. Please try again.";
-        setState((prev) => ({
-          ...prev,
+        const fallback = getFallbackShows();
+        setState({
+          ...fallback,
           loading: false,
-          error: errorMessage,
-        }));
+          error: null,
+        });
       });
   }, []);
 
   // Kick off fetch immediately when provider mounts (app start)
   useEffect(() => {
-    fetchData();
+    const timeoutId = window.setTimeout(() => {
+      fetchData();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
 
   const refresh = useCallback(() => {

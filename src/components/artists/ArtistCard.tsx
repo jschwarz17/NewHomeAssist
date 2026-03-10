@@ -3,6 +3,7 @@
 import Image from "next/image";
 import React from "react";
 import type { ArtistSectionItem } from "@/context/ArtistsContext";
+import { openLink } from "@/lib/open-link";
 
 export interface ArtistCardProps extends ArtistSectionItem {
   isSelected: boolean;
@@ -74,6 +75,8 @@ export function ArtistCard({
   const spotifyTrackId = effectiveSpotifyTrackUri?.replace("spotify:track:", "") ?? null;
   const spotifyArtistId = effectiveSpotifyId?.replace("spotify:artist:", "") ?? null;
   const hasSpotifyWidget = spotifyTrackId || spotifyArtistId;
+  const spotifyTrackUrl = spotifyTrackId ? `https://open.spotify.com/track/${spotifyTrackId}` : null;
+  const spotifyArtistUrl = spotifyArtistId ? `https://open.spotify.com/artist/${spotifyArtistId}` : null;
 
   return (
     <div
@@ -127,6 +130,30 @@ export function ArtistCard({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="border-t border-zinc-800 pt-3">
+            <div className="mb-2 flex flex-wrap gap-2">
+              {spotifyTrackUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void openLink(spotifyTrackUrl);
+                  }}
+                  className="rounded-full border border-zinc-700 px-2.5 py-1 text-[11px] font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+                >
+                  Open track
+                </button>
+              )}
+              {spotifyArtistUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void openLink(spotifyArtistUrl);
+                  }}
+                  className="rounded-full border border-zinc-700 px-2.5 py-1 text-[11px] font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+                >
+                  Open artist
+                </button>
+              )}
+            </div>
             <iframe
               src={
                 spotifyTrackId

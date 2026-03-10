@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CURATED_MOVIES, CURATED_SHOWS } from "@/lib/curated-shows";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -67,7 +68,23 @@ export async function GET(req: NextRequest) {
   const year = req.nextUrl.searchParams.get("year") ?? undefined;
   const xaiKey = process.env.XAI_API_KEY;
 
-  if (!query || !xaiKey) {
+  if (!query) {
+    return NextResponse.json({ poster: null });
+  }
+
+  const curatedPoster =
+    [...CURATED_SHOWS, ...CURATED_MOVIES].find((item) => {
+      const normalizedQuery = query.trim().toLowerCase();
+      return (
+        item.title.toLowerCase() === normalizedQuery ||
+        item.tmdbSearchTitle.toLowerCase() === normalizedQuery
+      );
+    })?.posterUrl ?? null;
+  if (curatedPoster) {
+    return NextResponse.json({ poster: curatedPoster });
+  }
+
+  if (!xaiKey) {
     return NextResponse.json({ poster: null });
   }
 

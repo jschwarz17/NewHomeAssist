@@ -15,6 +15,7 @@ export interface ShowItem {
   streamingService: string;
   tmdbSearchTitle: string;
   trailerSearchQuery: string;
+  trailerVideoId: string | null;
   mood: ShowMood;
   posterUrl: string | null;
 }
@@ -114,7 +115,7 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
   // If we didn't find a complete object, try to extract what we can
   if (depth !== 0) {
     // Try to find the last complete closing brace
-    let lastBrace = jsonStr.lastIndexOf("}");
+    const lastBrace = jsonStr.lastIndexOf("}");
     if (lastBrace > firstBrace) {
       // Verify this might be a valid end
       const potentialSlice = jsonStr.slice(firstBrace, lastBrace + 1);
@@ -172,6 +173,7 @@ function parseGrokResponse(raw: string): { shows: ShowItem[]; movies: ShowItem[]
     streamingService: o.streamingService ?? "",
     tmdbSearchTitle: o.title ?? "",
     trailerSearchQuery: `${o.title ?? ""} ${o.year ?? ""} Official Trailer`.trim(),
+    trailerVideoId: null,
     mood: "gritty" as ShowMood,
     posterUrl: o.posterUrl && o.posterUrl.startsWith("http") ? o.posterUrl : null,
   });
@@ -199,9 +201,6 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
   });
 
   const bodyText = await res.text();
-  // #region agent log
-  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b86282'},body:JSON.stringify({sessionId:'b86282',location:'shows-recommendations-grok.ts:api',message:'Grok API response',data:{status:res.status,bodyLength:bodyText.length},timestamp:Date.now(),hypothesisId:'H2-H4'})}).catch(()=>{});
-  // #endregion
   if (!res.ok) {
     throw new Error(`Grok API error: ${res.status} — ${bodyText.slice(0, 200)}`);
   }
@@ -219,18 +218,10 @@ async function callGrokAndParse(apiKey: string): Promise<RecommendationsResult> 
   const messageItem = (data.output as OutputItem[] | undefined)?.find((o) => o.type === "message");
   const contentBlocks = messageItem?.content ?? [];
   const outputTextBlocks = contentBlocks.filter((c): c is { type: string; text: string } => c.type === "output_text");
-  // #region agent log
-  const _rawFirstOnly = outputTextBlocks[0]?.text ?? "";
-  const _allJoined = outputTextBlocks.map((b) => b.text).join("\n");
-  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b86282'},body:JSON.stringify({sessionId:'b86282',location:'shows-recommendations-grok.ts:extract',message:'Grok response extraction',data:{contentBlocksCount:contentBlocks.length,outputTextBlocksCount:outputTextBlocks.length,firstBlockLength:_rawFirstOnly.length,allJoinedLength:_allJoined.length,hasJsonMarkerFirst:_rawFirstOnly.includes('---JSON---'),hasJsonMarkerInJoined:_allJoined.includes('---JSON---'),first200:_rawFirstOnly.slice(0,200),tail400:_rawFirstOnly.slice(-400)},timestamp:Date.now(),hypothesisId:'H3-H4'})}).catch(()=>{});
-  // #endregion
   // Join all output_text blocks in case the response is split across multiple blocks
   const raw = outputTextBlocks.map((b) => b.text).join("\n");
 
   const parsed = parseGrokResponse(raw);
-  // #region agent log
-  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b86282'},body:JSON.stringify({sessionId:'b86282',location:'shows-recommendations-grok.ts:parse',message:'Parse result',data:{rawLength:raw.length,hasJsonMarker:raw.includes('---JSON---'),parseError:'error' in parsed ? parsed.error : null,showsCount:'shows' in parsed ? parsed.shows.length : 0,moviesCount:'movies' in parsed ? parsed.movies.length : 0},timestamp:Date.now(),hypothesisId:'H1-H2-H5'})}).catch(()=>{});
-  // #endregion
   if ("error" in parsed) {
     const reason = parsed.error;
     const snippet = raw.length > 800 ? raw.slice(-800) : raw;
