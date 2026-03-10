@@ -119,9 +119,9 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       ? `${base}/api/shows/recommendations/`
       : "/api/shows/recommendations";
 
-    // Add timeout to prevent hanging
+    // Timeout: allow up to 120 s for on-demand Grok calls (first load without cache)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 120_000);
 
     fetch(url, { cache: "no-store", signal: controller.signal })
       .then((r) =>

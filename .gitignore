@@ -43,3 +43,6 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Local recommendation cache (file-based fallback when Postgres is unavailable)
+.cache/

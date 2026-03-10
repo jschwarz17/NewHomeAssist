@@ -26,3 +26,5 @@ See `README.md` **Commands** table for the full list including Capacitor sync/op
 - **`.env.local`**: Copy `.env.example` to `.env.local` for local development. The dev server reads from `.env.local` automatically.
 - **SQLite**: The learning engine uses `better-sqlite3` with a local `ara.db` file auto-created on first use. No separate database setup required.
 - **Capacitor / Android**: Only relevant for tablet builds. Web development works entirely without Android SDK or Capacitor.
+- **Shows & Artists cache**: Both modules use a two-tier cache: Postgres (Neon) when `DATABASE_URL`/`POSTGRES_URL` is set, otherwise local JSON files in `.cache/`. When cache is empty and `XAI_API_KEY` is configured, the recommendation routes call Grok on-demand (takes ~30-90s on first load, then cached for 24h). The `.cache/` directory is git-ignored.
+- **Client-side timeout**: The Shows and Artists contexts use a 120s fetch timeout to accommodate on-demand Grok API calls on first load without cache.

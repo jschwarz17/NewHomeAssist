@@ -1,12 +1,18 @@
 /**
- * Persistent cache for Ara recommendations (Postgres).
- * Used so one daily Grok run at 6am can pre-fill the cache and the app always reads instantly.
+ * Persistent cache for Ara recommendations.
+ * Prefers Postgres (Neon) when DATABASE_URL / POSTGRES_URL is set;
+ * falls back to a local JSON file so local dev works without a database.
  */
 
 import { neon } from "@neondatabase/serverless";
+import fs from "fs";
+import path from "path";
 
 const CACHE_KEY = "default";
-const TTL_HOURS = 24;
+const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+const LOCAL_CACHE_DIR = path.resolve(process.cwd(), ".cache");
+const LOCAL_CACHE_FILE = path.join(LOCAL_CACHE_DIR, "shows.json");
 
 function getSql() {
   const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
@@ -21,6 +27,33 @@ export interface CachedShowsPayload {
   version: number;
 }
 
+// ── Local file cache helpers ────────────────────────────────────────────────
+
+function readFileCache(): CachedShowsPayload | null {
+  try {
+    if (!fs.existsSync(LOCAL_CACHE_FILE)) return null;
+    const raw = fs.readFileSync(LOCAL_CACHE_FILE, "utf-8");
+    const entry = JSON.parse(raw) as CachedShowsPayload;
+    if (Date.now() - entry.cachedAt < TTL_MS) return entry;
+  } catch {
+    // corrupt or unreadable — treat as cache miss
+  }
+  return null;
+}
+
+function writeFileCache(payload: CachedShowsPayload): void {
+  try {
+    if (!fs.existsSync(LOCAL_CACHE_DIR)) {
+      fs.mkdirSync(LOCAL_CACHE_DIR, { recursive: true });
+    }
+    fs.writeFileSync(LOCAL_CACHE_FILE, JSON.stringify(payload), "utf-8");
+  } catch (e) {
+    console.error("[shows-cache] writeFileCache error:", e);
+  }
+}
+
+// ── Public API ──────────────────────────────────────────────────────────────
+
 export async function initShowsCacheTable(): Promise<void> {
   const sql = getSql();
   if (!sql) return;
@@ -33,35 +66,44 @@ export async function initShowsCacheTable(): Promise<void> {
   `;
 }
 
-/** Returns cached payload if present and younger than TTL_HOURS; otherwise null. */
+/** Returns cached payload if present and younger than 24 h; otherwise null. */
 export async function getShowsCache(): Promise<CachedShowsPayload | null> {
+  // Try Postgres first
   const sql = getSql();
-  if (!sql) return null;
-  try {
-    const rows = await sql`
-      SELECT data, cached_at
-      FROM shows_recommendations_cache
-      WHERE key = ${CACHE_KEY}
-        AND cached_at > NOW() - INTERVAL '24 hours'
-      LIMIT 1
-    `;
-    const row = Array.isArray(rows) ? rows[0] : null;
-    if (!row || !row.data) return null;
-    const data = row.data as Record<string, unknown>;
-    const cachedAt = row.cached_at instanceof Date ? row.cached_at.getTime() : Date.now();
-    return {
-      shows: (data.shows as unknown[]) ?? [],
-      movies: (data.movies as unknown[]) ?? [],
-      cachedAt,
-      version: Number(data.version) ?? 0,
-    };
-  } catch {
-    return null;
+  if (sql) {
+    try {
+      const rows = await sql`
+        SELECT data, cached_at
+        FROM shows_recommendations_cache
+        WHERE key = ${CACHE_KEY}
+          AND cached_at > NOW() - INTERVAL '24 hours'
+        LIMIT 1
+      `;
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (row?.data) {
+        const data = row.data as Record<string, unknown>;
+        const cachedAt = row.cached_at instanceof Date ? row.cached_at.getTime() : Date.now();
+        return {
+          shows: (data.shows as unknown[]) ?? [],
+          movies: (data.movies as unknown[]) ?? [],
+          cachedAt,
+          version: Number(data.version) ?? 0,
+        };
+      }
+    } catch {
+      // fall through to file cache
+    }
   }
+
+  // Fall back to local file cache
+  return readFileCache();
 }
 
-/** Writes the payload to Postgres (upsert). */
+/** Writes the payload to Postgres (if available) and always to local file. */
 export async function setShowsCache(payload: CachedShowsPayload): Promise<void> {
+  // Always write to file so local dev has a cache
+  writeFileCache(payload);
+
   const sql = getSql();
   if (!sql) return;
   try {

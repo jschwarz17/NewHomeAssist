@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getShowsCache } from "@/lib/shows-cache";
+import { getShowsCache, setShowsCache } from "@/lib/shows-cache";
+import { fetchRecommendationsFromGrok } from "@/lib/shows-recommendations-grok";
 import type { ShowItem } from "@/lib/shows-recommendations-grok";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -16,9 +17,7 @@ export type { ShowItem } from "@/lib/shows-recommendations-grok";
 export type { ShowMood } from "@/lib/shows-recommendations-grok";
 
 export async function GET() {
-  const apiKey = process.env.XAI_API_KEY;
-
-  // 1. Prefer persistent cache (filled by 6am cron or a previous request)
+  // 1. Prefer persistent cache (filled by cron, Postgres, or local file)
   const cached = await getShowsCache();
   if (cached && cached.shows.length > 0) {
     return NextResponse.json(
@@ -32,11 +31,43 @@ export async function GET() {
     );
   }
 
-  // 2. No cache: do not call Grok here (it takes 60+ s and causes 504). Only the 6am cron fills the cache.
+  // 2. No cache — try fetching on-demand from Grok if API key is available
+  const apiKey = process.env.XAI_API_KEY;
+  if (apiKey) {
+    try {
+      const result = await fetchRecommendationsFromGrok(apiKey);
+      await setShowsCache({
+        shows: result.shows,
+        movies: result.movies,
+        cachedAt: result.cachedAt,
+        version: result.version,
+      });
+      return NextResponse.json(
+        {
+          shows: result.shows,
+          movies: result.movies,
+          cachedAt: result.cachedAt,
+          version: result.version,
+        },
+        { headers: CORS_HEADERS }
+      );
+    } catch (err) {
+      console.error("[shows/recommendations] on-demand Grok error:", err);
+      return NextResponse.json(
+        {
+          error: "Failed to fetch recommendations. Please try again.",
+          details: err instanceof Error ? err.message : String(err),
+        },
+        { status: 500, headers: CORS_HEADERS }
+      );
+    }
+  }
+
+  // 3. No cache and no API key
   return NextResponse.json(
     {
       error:
-        "Recommendations refresh daily at 6am ET. Try again in a few minutes or tap Retry.",
+        "XAI_API_KEY is not configured. Set it in .env.local to enable recommendations.",
     },
     { status: 503, headers: CORS_HEADERS }
   );
