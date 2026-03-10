@@ -14,6 +14,7 @@ export interface ShowCardProps {
   language: string;
   streamingService: string;
   posterUrl: string | null;
+  tmdbSearchTitle?: string;
   mood: ShowMood;
   isSelected: boolean;
   onSelect: () => void;
@@ -39,6 +40,7 @@ export function ShowCard({
   language,
   streamingService,
   posterUrl,
+  tmdbSearchTitle,
   mood,
   isSelected,
   onSelect,
@@ -46,7 +48,33 @@ export function ShowCard({
   isLoadingTrailer,
 }: ShowCardProps) {
   const [imgError, setImgError] = React.useState(false);
-  React.useEffect(() => { setImgError(false); }, [posterUrl]);
+  const [resolvedPoster, setResolvedPoster] = React.useState<string | null>(posterUrl ?? null);
+
+  React.useEffect(() => {
+    setImgError(false);
+    setResolvedPoster(posterUrl ?? null);
+  }, [posterUrl]);
+
+  // Hydrate poster when missing: fetch from poster API
+  React.useEffect(() => {
+    if (resolvedPoster || !tmdbSearchTitle) return;
+    const query = (tmdbSearchTitle || title).trim();
+    if (!query) return;
+    const base = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "") : "";
+    const url = base ? `${base}/api/shows/poster/` : "/api/shows/poster/";
+    const params = new URLSearchParams();
+    params.set("query", query);
+    params.set("type", type);
+    if (year) params.set("year", year);
+    fetch(`${url}?${params}`)
+      .then((r) => r.json())
+      .then((data: { poster?: string | null }) => {
+        if (data.poster && data.poster.startsWith("http")) {
+          setResolvedPoster(data.poster);
+        }
+      })
+      .catch(() => {});
+  }, [resolvedPoster, tmdbSearchTitle, title, type, year]);
   const isInternational = language && language.toLowerCase() !== "english";
   return (
     <div
@@ -58,9 +86,9 @@ export function ShowCard({
       <div className="flex gap-3 p-3">
         {/* Poster */}
         <div className="flex-shrink-0 w-[72px] h-[108px] rounded-lg overflow-hidden bg-zinc-800">
-          {posterUrl && !imgError ? (
+          {(resolvedPoster || posterUrl) && !imgError ? (
             <Image
-              src={posterUrl}
+              src={resolvedPoster || posterUrl || ""}
               alt={title}
               width={72}
               height={108}

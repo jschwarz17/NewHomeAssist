@@ -20,10 +20,60 @@ export function ArtistCard({
   onSelect,
 }: ArtistCardProps) {
   const [imgError, setImgError] = React.useState(false);
-  React.useEffect(() => { setImgError(false); }, [imageUrl]);
+  const [resolvedImage, setResolvedImage] = React.useState<string | null>(imageUrl ?? null);
 
-  // Extract Spotify track ID from URI for embed
-  const spotifyTrackId = spotifyTrackUri?.replace("spotify:track:", "") ?? null;
+  React.useEffect(() => {
+    setImgError(false);
+    setResolvedImage(imageUrl ?? null);
+  }, [imageUrl]);
+
+  // Hydrate image when missing: fetch from artist image API
+  React.useEffect(() => {
+    if (resolvedImage || !name?.trim()) return;
+    const base = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "") : "";
+    const url = base ? `${base}/api/artists/image/` : "/api/artists/image/";
+    fetch(`${url}?name=${encodeURIComponent(name.trim())}`)
+      .then((r) => r.json())
+      .then((data: { image?: string | null }) => {
+        if (data.image && data.image.startsWith("http")) {
+          setResolvedImage(data.image);
+        }
+      })
+      .catch(() => {});
+  }, [resolvedImage, name]);
+
+  // Spotify widget: use existing data or fetch from API when missing
+  const [spotifyData, setSpotifyData] = React.useState<{
+    spotifyId: string | null;
+    spotifyTrackUri: string | null;
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (spotifyId || spotifyTrackUri) {
+      setSpotifyData({ spotifyId, spotifyTrackUri });
+      return;
+    }
+    if (!name?.trim()) return;
+    const base = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "") : "";
+    const url = base ? `${base}/api/artists/spotify/` : "/api/artists/spotify/";
+    fetch(`${url}?name=${encodeURIComponent(name.trim())}`)
+      .then((r) => r.json())
+      .then((data: { spotifyId?: string | null; spotifyTrackUri?: string | null }) => {
+        if (data.spotifyId || data.spotifyTrackUri) {
+          setSpotifyData({
+            spotifyId: data.spotifyId ?? null,
+            spotifyTrackUri: data.spotifyTrackUri ?? null,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [spotifyId, spotifyTrackUri, name]);
+
+  const effectiveSpotifyId = spotifyData?.spotifyId ?? spotifyId;
+  const effectiveSpotifyTrackUri = spotifyData?.spotifyTrackUri ?? spotifyTrackUri;
+  const spotifyTrackId = effectiveSpotifyTrackUri?.replace("spotify:track:", "") ?? null;
+  const spotifyArtistId = effectiveSpotifyId?.replace("spotify:artist:", "") ?? null;
+  const hasSpotifyWidget = spotifyTrackId || spotifyArtistId;
 
   return (
     <div
@@ -35,9 +85,9 @@ export function ArtistCard({
       <div className="flex gap-3 p-3">
         {/* Image */}
         <div className="flex-shrink-0 w-[72px] h-[72px] rounded-lg overflow-hidden bg-zinc-800">
-          {imageUrl && !imgError ? (
+          {(resolvedImage || imageUrl) && !imgError ? (
             <Image
-              src={imageUrl}
+              src={resolvedImage || imageUrl || ""}
               alt={name}
               width={72}
               height={72}
@@ -70,15 +120,19 @@ export function ArtistCard({
         </div>
       </div>
 
-      {/* Expanded: Spotify widget */}
-      {isSelected && spotifyTrackId && (
+      {/* Spotify widget: below each artist so user can play a song */}
+      {hasSpotifyWidget && (
         <div
           className="px-3 pb-3"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="border-t border-zinc-800 pt-3">
             <iframe
-              src={`https://open.spotify.com/embed/track/${spotifyTrackId}?utm_source=generator&theme=0`}
+              src={
+                spotifyTrackId
+                  ? `https://open.spotify.com/embed/track/${spotifyTrackId}?utm_source=generator&theme=0`
+                  : `https://open.spotify.com/embed/artist/${spotifyArtistId}?utm_source=generator&theme=0`
+              }
               width="100%"
               height="152"
               frameBorder="0"
