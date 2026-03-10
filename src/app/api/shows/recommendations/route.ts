@@ -32,7 +32,60 @@ export async function GET() {
     );
   }
 
-  // 2. No cache: do not call Grok here (it takes 60+ s and causes 504). Only the 6am cron fills the cache.
+  // 2. No cache: return mock data in dev for testing, else 503
+  if (process.env.NODE_ENV === "development") {
+    const mockShows: ShowItem[] = [
+      {
+        title: "Severance",
+        year: "2022",
+        type: "show",
+        description: "A man discovers a dark alternate self at his mysterious workplace.",
+        genre: "Sci-Fi Thriller",
+        country: "USA",
+        language: "English",
+        streamingService: "Apple TV+",
+        tmdbSearchTitle: "Severance",
+        trailerSearchQuery: "Severance 2022 Official Trailer",
+        mood: "gritty",
+        posterUrl: "https://upload.wikimedia.org/wikipedia/en/8/8c/Severance_%28TV_series%29.png",
+      },
+      {
+        title: "The Bear",
+        year: "2022",
+        type: "show",
+        description: "A chef returns to run his family's sandwich shop in Chicago.",
+        genre: "Drama",
+        country: "USA",
+        language: "English",
+        streamingService: "Hulu",
+        tmdbSearchTitle: "The Bear",
+        trailerSearchQuery: "The Bear 2022 Official Trailer",
+        mood: "gritty",
+        posterUrl: null,
+      },
+    ];
+    const mockMovies: ShowItem[] = [
+      {
+        title: "Dune: Part Two",
+        year: "2024",
+        type: "movie",
+        description: "Paul Atreides unites with the Fremen to wage war against House Harkonnen.",
+        genre: "Sci-Fi",
+        country: "USA",
+        language: "English",
+        streamingService: "Max",
+        tmdbSearchTitle: "Dune Part Two",
+        trailerSearchQuery: "Dune Part Two 2024 Official Trailer",
+        mood: "gritty",
+        posterUrl: "https://upload.wikimedia.org/wikipedia/en/2/2f/Dune_Part_Two_poster.jpg",
+      },
+    ];
+    return NextResponse.json(
+      { shows: mockShows, movies: mockMovies, cachedAt: Date.now(), version: 0 },
+      { headers: CORS_HEADERS }
+    );
+  }
+
   return NextResponse.json(
     {
       error:
