@@ -51,17 +51,26 @@ export function ShowCard({
   onOpenTrailer,
   isLoadingTrailer,
 }: ShowCardProps) {
-  const [imgError, setImgError] = React.useState(false);
   const [resolvedPoster, setResolvedPoster] = React.useState<string | null>(posterUrl ?? null);
+  const [failedPosters, setFailedPosters] = React.useState<string[]>([]);
+  const displayPoster = React.useMemo(() => {
+    const candidates = [resolvedPoster, posterUrl];
+    for (const candidate of candidates) {
+      if (candidate && !failedPosters.includes(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }, [failedPosters, posterUrl, resolvedPoster]);
 
   React.useEffect(() => {
-    setImgError(false);
     setResolvedPoster(posterUrl ?? null);
+    setFailedPosters([]);
   }, [posterUrl]);
 
-  // Hydrate poster when missing: fetch from poster API
+  // Hydrate poster when missing or when previous URLs fail to load.
   React.useEffect(() => {
-    if (resolvedPoster || !tmdbSearchTitle) return;
+    if (displayPoster || !tmdbSearchTitle) return;
     const query = (tmdbSearchTitle || title).trim();
     if (!query) return;
     const base = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "") : "";
@@ -73,12 +82,16 @@ export function ShowCard({
     fetch(`${url}?${params}`)
       .then((r) => r.json())
       .then((data: { poster?: string | null }) => {
-        if (data.poster && data.poster.startsWith("http")) {
+        if (
+          data.poster &&
+          data.poster.startsWith("http") &&
+          !failedPosters.includes(data.poster)
+        ) {
           setResolvedPoster(data.poster);
         }
       })
       .catch(() => {});
-  }, [resolvedPoster, tmdbSearchTitle, title, type, year]);
+  }, [displayPoster, failedPosters, tmdbSearchTitle, title, type, year]);
   const isInternational = language && language.toLowerCase() !== "english";
   return (
     <div
@@ -90,15 +103,20 @@ export function ShowCard({
       <div className="flex gap-3 p-3">
         {/* Poster */}
         <div className="flex-shrink-0 w-[72px] h-[108px] rounded-lg overflow-hidden bg-zinc-800">
-          {(resolvedPoster || posterUrl) && !imgError ? (
+          {displayPoster ? (
             <Image
-              src={resolvedPoster || posterUrl || ""}
+              src={displayPoster}
               alt={title}
               width={72}
               height={108}
               className="object-cover w-full h-full"
               unoptimized
-              onError={() => setImgError(true)}
+              onError={() => {
+                setFailedPosters((prev) =>
+                  prev.includes(displayPoster) ? prev : [...prev, displayPoster]
+                );
+                setResolvedPoster((prev) => (prev === displayPoster ? null : prev));
+              }}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">

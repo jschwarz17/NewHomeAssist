@@ -22,28 +22,41 @@ export function ArtistCard({
   isSelected,
   onSelect,
 }: ArtistCardProps) {
-  const [imgError, setImgError] = React.useState(false);
   const [resolvedImage, setResolvedImage] = React.useState<string | null>(imageUrl ?? null);
+  const [failedImages, setFailedImages] = React.useState<string[]>([]);
+  const displayImage = React.useMemo(() => {
+    const candidates = [resolvedImage, imageUrl];
+    for (const candidate of candidates) {
+      if (candidate && !failedImages.includes(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }, [failedImages, imageUrl, resolvedImage]);
 
   React.useEffect(() => {
-    setImgError(false);
     setResolvedImage(imageUrl ?? null);
+    setFailedImages([]);
   }, [imageUrl]);
 
-  // Hydrate image when missing: fetch from artist image API
+  // Hydrate image when missing or when previous URLs fail to load.
   React.useEffect(() => {
-    if (resolvedImage || !name?.trim()) return;
+    if (displayImage || !name?.trim()) return;
     const base = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "") : "";
     const url = base ? `${base}/api/artists/image/` : "/api/artists/image/";
     fetch(`${url}?name=${encodeURIComponent(name.trim())}`)
       .then((r) => r.json())
       .then((data: { image?: string | null }) => {
-        if (data.image && data.image.startsWith("http")) {
+        if (
+          data.image &&
+          data.image.startsWith("http") &&
+          !failedImages.includes(data.image)
+        ) {
           setResolvedImage(data.image);
         }
       })
       .catch(() => {});
-  }, [resolvedImage, name]);
+  }, [displayImage, failedImages, name]);
 
   // Spotify widget: use existing data or fetch from API when missing
   const [spotifyData, setSpotifyData] = React.useState<{
@@ -90,15 +103,20 @@ export function ArtistCard({
       <div className="flex gap-3 p-3">
         {/* Image */}
         <div className="flex-shrink-0 w-[72px] h-[72px] rounded-lg overflow-hidden bg-zinc-800">
-          {(resolvedImage || imageUrl) && !imgError ? (
+          {displayImage ? (
             <Image
-              src={resolvedImage || imageUrl || ""}
+              src={displayImage}
               alt={name}
               width={72}
               height={72}
               className="object-cover w-full h-full"
               unoptimized
-              onError={() => setImgError(true)}
+              onError={() => {
+                setFailedImages((prev) =>
+                  prev.includes(displayImage) ? prev : [...prev, displayImage]
+                );
+                setResolvedImage((prev) => (prev === displayImage ? null : prev));
+              }}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
@@ -166,20 +184,22 @@ export function ArtistCard({
                 </button>
               )}
             </div>
-            <iframe
-              src={
-                spotifyTrackId
-                  ? `https://open.spotify.com/embed/track/${spotifyTrackId}?utm_source=generator&theme=0`
-                  : `https://open.spotify.com/embed/artist/${spotifyArtistId}?utm_source=generator&theme=0`
-              }
-              width="100%"
-              height="152"
-              frameBorder="0"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-              loading="lazy"
-              className="rounded-lg"
-              style={{ minHeight: "152px" }}
-            />
+            {hasSpotifyWidget && (
+              <iframe
+                src={
+                  spotifyTrackId
+                    ? `https://open.spotify.com/embed/track/${spotifyTrackId}?utm_source=generator&theme=0`
+                    : `https://open.spotify.com/embed/artist/${spotifyArtistId}?utm_source=generator&theme=0`
+                }
+                width="100%"
+                height="152"
+                frameBorder="0"
+                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                loading="lazy"
+                className="rounded-lg"
+                style={{ minHeight: "152px" }}
+              />
+            )}
           </div>
         </div>
       )}
