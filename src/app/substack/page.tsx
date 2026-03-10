@@ -154,7 +154,7 @@ export default function SubstackPage() {
     setModalContent("");
 
     const response = await fetch(
-      `${buildApiUrl("/api/substack/article-content")}?url=${encodeURIComponent(article.link)}`,
+      `${buildApiUrl("/api/substack/article-content/")}?url=${encodeURIComponent(article.link)}`,
       { cache: "no-store" }
     );
 
@@ -328,7 +328,7 @@ export default function SubstackPage() {
             const controller = new AbortController();
             playbackAbortRef.current = controller;
 
-            const response = await fetch(buildApiUrl("/api/substack/article-audio"), {
+            const response = await fetch(buildApiUrl("/api/substack/article-audio/"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ text: chunks[index] }),
@@ -339,6 +339,11 @@ export default function SubstackPage() {
             if (!response.ok) {
               const data = (await response.json().catch(() => ({}))) as { error?: string };
               throw new Error(data.error || "Ara voice is unavailable.");
+            }
+
+            const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+            if (!contentType.includes("audio")) {
+              throw new Error("Ara voice returned an invalid audio response.");
             }
 
             const audioBlob = await response.blob();
