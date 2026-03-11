@@ -178,7 +178,7 @@ export default function SubstackPage() {
 
   const waitForAudioToFinish = useCallback((audio: HTMLAudioElement) => {
     return new Promise<void>((resolve, reject) => {
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      let timeoutId: number | null = null;
 
       const cleanup = () => {
         audio.removeEventListener("ended", handleEnded);
