@@ -5,17 +5,8 @@ import { useSubstack, type SubstackArticle } from "@/context/SubstackContext";
 import { ArticlesSection } from "@/components/substack/ArticlesSection";
 import { ArticleModal } from "@/components/substack/ArticleModal";
 
-const MAX_TTS_CHARS = 3600;
-
-function getApiBase(): string {
-  if (typeof window === "undefined") return "";
-  return (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "");
-}
-
-function buildApiUrl(path: string): string {
-  const base = getApiBase();
-  return base ? `${base}${path}` : path;
-}
+/** Smaller chunks = faster first response and quicker time-to-first-audio */
+const MAX_TTS_CHARS = 50;
 
 function splitTextForAra(text: string): string[] {
   const normalized = text.replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();
@@ -154,7 +145,7 @@ export default function SubstackPage() {
     setModalContent("");
 
     const response = await fetch(
-      `${buildApiUrl("/api/substack/article-content/")}?url=${encodeURIComponent(article.link)}`,
+      `/api/substack/article-content/?url=${encodeURIComponent(article.link)}`,
       { cache: "no-store" }
     );
 
@@ -187,6 +178,30 @@ export default function SubstackPage() {
 
   const waitForAudioToFinish = useCallback((audio: HTMLAudioElement) => {
     return new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+      const cleanup = () => {
+        audio.removeEventListener("ended", handleEnded);
+        audio.removeEventListener("error", handleError);
+        audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+      };
+
+      const MAX_WAIT_MS = 10 * 60 * 1000;
+      const scheduleFallbackTimeout = (ms: number) => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        timeoutId = window.setTimeout(() => {
+          cleanup();
+          resolve();
+        }, Math.min(ms, MAX_WAIT_MS));
+      };
+
       const handleEnded = () => {
         cleanup();
         resolve();
@@ -197,13 +212,23 @@ export default function SubstackPage() {
         reject(new Error("Audio playback failed."));
       };
 
-      const cleanup = () => {
-        audio.removeEventListener("ended", handleEnded);
-        audio.removeEventListener("error", handleError);
+      const handleLoadedMetadata = () => {
+        const durationSec = audio.duration;
+        if (Number.isFinite(durationSec) && durationSec > 0) {
+          scheduleFallbackTimeout(Math.ceil(durationSec * 1000) + 2000);
+        } else {
+          scheduleFallbackTimeout(5 * 60 * 1000);
+        }
       };
 
       audio.addEventListener("ended", handleEnded);
       audio.addEventListener("error", handleError);
+      if (audio.readyState >= 1) {
+        handleLoadedMetadata();
+      } else {
+        audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+        scheduleFallbackTimeout(MAX_WAIT_MS);
+      }
     });
   }, []);
 
@@ -307,6 +332,7 @@ export default function SubstackPage() {
 
         setPlayingUrl(article.link);
 
+        const audioApiUrl = "/api/substack/article-audio/";
         let useBrowserVoiceFallback = false;
         for (let index = 0; index < chunks.length; index += 1) {
           if (playbackSessionRef.current !== sessionId) {
@@ -328,7 +354,7 @@ export default function SubstackPage() {
             const controller = new AbortController();
             playbackAbortRef.current = controller;
 
-            const response = await fetch(buildApiUrl("/api/substack/article-audio/"), {
+            const response = await fetch(audioApiUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ text: chunks[index] }),
@@ -336,12 +362,12 @@ export default function SubstackPage() {
             });
             playbackAbortRef.current = null;
 
+            const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
             if (!response.ok) {
               const data = (await response.json().catch(() => ({}))) as { error?: string };
               throw new Error(data.error || "Ara voice is unavailable.");
             }
 
-            const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
             if (!contentType.includes("audio")) {
               throw new Error("Ara voice returned an invalid audio response.");
             }
