@@ -285,7 +285,6 @@ export default function SubstackPage() {
         audioRef.current = audio;
         audio.preload = "auto";
         audio.volume = 1;
-        speechUsingBrowserVoiceRef.current = false;
 
         const chunks = splitTextForAra(
           `${loaded.title || article.title}. ${loaded.content}`
