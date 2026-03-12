@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSubstack, type SubstackArticle } from "@/context/SubstackContext";
+import { useVoice } from "@/context/VoiceProvider";
+import { speakWithAraRealtime } from "@/lib/ara-read-aloud";
 import { ArticlesSection } from "@/components/substack/ArticlesSection";
 import { ArticleModal } from "@/components/substack/ArticleModal";
 
@@ -89,6 +91,7 @@ interface LoadedArticle {
 
 export default function SubstackPage() {
   const { ai, politics, fintech, loading, error, refresh } = useSubstack();
+  const { getRealtimeToken } = useVoice();
   const [loadingUrl, setLoadingUrl] = useState<string | null>(null);
   const [playingUrl, setPlayingUrl] = useState<string | null>(null);
   const [playbackStatus, setPlaybackStatus] = useState<string | null>(null);
@@ -102,8 +105,6 @@ export default function SubstackPage() {
   const audioBlobUrlRef = useRef<string | null>(null);
   const playbackSessionRef = useRef(0);
   const playbackAbortRef = useRef<AbortController | null>(null);
-  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const speechUsingBrowserVoiceRef = useRef(false);
 
   const revokeAudioBlobUrl = useCallback(() => {
     if (!audioBlobUrlRef.current) return;
@@ -115,11 +116,9 @@ export default function SubstackPage() {
     playbackSessionRef.current += 1;
     playbackAbortRef.current?.abort();
     playbackAbortRef.current = null;
-    speechUsingBrowserVoiceRef.current = false;
 
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
-      speechUtteranceRef.current = null;
     }
 
     if (audioRef.current) {
@@ -255,63 +254,6 @@ export default function SubstackPage() {
     });
   }, []);
 
-  const resolveBrowserVoice = useCallback((): SpeechSynthesisVoice | null => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) return null;
-
-    const preferredName = voices.find(
-      (voice) =>
-        /en/i.test(voice.lang) &&
-        /(female|zira|samantha|ava|aria|jenny|alloy|nova|luna)/i.test(voice.name)
-    );
-    if (preferredName) return preferredName;
-
-    const preferredLang = voices.find((voice) => /^en[-_]/i.test(voice.lang));
-    return preferredLang ?? voices[0] ?? null;
-  }, []);
-
-  const waitForSpeechToFinish = useCallback((utterance: SpeechSynthesisUtterance) => {
-    return new Promise<void>((resolve, reject) => {
-      const handleEnd = () => {
-        utterance.removeEventListener("end", handleEnd);
-        utterance.removeEventListener("error", handleError);
-        speechUtteranceRef.current = null;
-        resolve();
-      };
-      const handleError = () => {
-        utterance.removeEventListener("end", handleEnd);
-        utterance.removeEventListener("error", handleError);
-        speechUtteranceRef.current = null;
-        reject(new Error("Browser speech synthesis failed."));
-      };
-
-      utterance.addEventListener("end", handleEnd);
-      utterance.addEventListener("error", handleError);
-    });
-  }, []);
-
-  const speakChunkWithBrowserVoice = useCallback(
-    async (text: string) => {
-      if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-        throw new Error("Browser speech synthesis is unavailable.");
-      }
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      const voice = resolveBrowserVoice();
-      if (voice) {
-        utterance.voice = voice;
-      }
-
-      speechUtteranceRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
-      await waitForSpeechToFinish(utterance);
-    },
-    [resolveBrowserVoice, waitForSpeechToFinish]
-  );
-
   const handleOpenArticle = useCallback(
     async (article: SubstackArticle) => {
       try {
@@ -355,102 +297,89 @@ export default function SubstackPage() {
 
         setPlayingUrl(article.link);
 
-        const base = getApiBase();
-        const audioApiUrl = base ? `${base}/api/substack/article-audio/` : "/api/substack/article-audio/";
-        let useBrowserVoiceFallback = false;
-        for (let index = 0; index < chunks.length; index += 1) {
-          if (playbackSessionRef.current !== sessionId) {
-            return;
-          }
+        const controller = new AbortController();
+        playbackAbortRef.current = controller;
 
-          const chunkStatus = `Ara is reading part ${index + 1} of ${chunks.length}`;
-          setPlaybackStatus(
-            useBrowserVoiceFallback ? `${chunkStatus} (browser voice)` : chunkStatus
-          );
-
-          if (useBrowserVoiceFallback) {
+        let usedAraRealtime = false;
+        try {
+          const tokenResult = await getRealtimeToken();
+          if (tokenResult.token && playbackSessionRef.current === sessionId) {
+            setPlaybackStatus("Ara is reading…");
             setLoadingUrl(null);
-            await speakChunkWithBrowserVoice(chunks[index]);
-            continue;
+            await speakWithAraRealtime({
+              token: tokenResult.token,
+              chunks,
+              onChunkStart: (index, total) => {
+                if (playbackSessionRef.current === sessionId) {
+                  setPlaybackStatus(`Ara is reading part ${index + 1} of ${total}`);
+                }
+              },
+              signal: controller.signal,
+            });
+            usedAraRealtime = true;
           }
+        } catch (realtimeErr) {
+          if (realtimeErr instanceof DOMException && realtimeErr.name === "AbortError") {
+            throw realtimeErr;
+          }
+          // Fall through to article-audio API
+        }
 
-          try {
-            const controller = new AbortController();
-            playbackAbortRef.current = controller;
+        if (!usedAraRealtime && playbackSessionRef.current === sessionId) {
+          const base = getApiBase();
+          const audioApiUrl = base ? `${base}/api/substack/article-audio/` : "/api/substack/article-audio/";
+          for (let index = 0; index < chunks.length; index += 1) {
+            if (playbackSessionRef.current !== sessionId) break;
 
-            const response = await fetch(audioApiUrl, {
+            setPlaybackStatus(`Ara is reading part ${index + 1} of ${chunks.length}`);
+
+            try {
+              const response = await fetch(audioApiUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ text: chunks[index] }),
               signal: controller.signal,
-            });
-            playbackAbortRef.current = null;
+              });
 
-            const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-            if (!response.ok) {
-              const errorBody = await response.text();
-              let errData: { error?: string } = {};
-              try {
-                if (errorBody.trimStart().startsWith("{")) errData = JSON.parse(errorBody) as { error?: string };
-              } catch {
-                // #region agent log
-                fetch("http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "651c00" },
-                  body: JSON.stringify({
-                    sessionId: "651c00",
-                    location: "substack/page.tsx:article-audio",
-                    message: "article-audio error response was not JSON",
-                    data: { status: response.status, contentType, bodyStart: errorBody.trimStart().slice(0, 120) },
-                    timestamp: Date.now(),
-                    hypothesisId: "B",
-                  }),
-                }).catch(() => {});
-                // #endregion
+              const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+              if (!response.ok) {
+                const errorBody = await response.text();
+                let errData: { error?: string } = {};
+                try {
+                  if (errorBody.trimStart().startsWith("{")) errData = JSON.parse(errorBody) as { error?: string };
+                } catch {
+                  // non-JSON error body
+                }
+                throw new Error(errData.error || "Ara voice is unavailable.");
               }
-              throw new Error(errData.error || "Ara voice is unavailable.");
+
+              if (!contentType.includes("audio")) {
+                throw new Error("Ara voice returned an invalid audio response.");
+              }
+
+              const audioBlob = await response.blob();
+              if (!audioBlob.size) throw new Error("Ara voice returned empty audio.");
+              if (playbackSessionRef.current !== sessionId) break;
+
+              revokeAudioBlobUrl();
+              audioBlobUrlRef.current = URL.createObjectURL(audioBlob);
+              audio.src = audioBlobUrlRef.current;
+              setLoadingUrl(null);
+              await audio.play();
+              await waitForAudioToFinish(audio);
+              revokeAudioBlobUrl();
+            } catch (chunkError) {
+              if (chunkError instanceof DOMException && chunkError.name === "AbortError") throw chunkError;
+              setModalError(
+                chunkError instanceof Error ? chunkError.message : "Ara voice is unavailable. Try again later."
+              );
+              break;
             }
-
-            if (!contentType.includes("audio")) {
-              throw new Error("Ara voice returned an invalid audio response.");
-            }
-
-            const audioBlob = await response.blob();
-            if (!audioBlob.size) {
-              throw new Error("Ara voice returned empty audio.");
-            }
-            if (playbackSessionRef.current !== sessionId) {
-              return;
-            }
-
-            revokeAudioBlobUrl();
-            audioBlobUrlRef.current = URL.createObjectURL(audioBlob);
-            audio.src = audioBlobUrlRef.current;
-            setLoadingUrl(null);
-            await audio.play();
-            await waitForAudioToFinish(audio);
-            revokeAudioBlobUrl();
-          } catch (chunkError) {
-            if (chunkError instanceof DOMException && chunkError.name === "AbortError") {
-              throw chunkError;
-            }
-
-            useBrowserVoiceFallback = true;
-            speechUsingBrowserVoiceRef.current = true;
-            playbackAbortRef.current = null;
-
-            revokeAudioBlobUrl();
-            audio.pause();
-            audio.removeAttribute("src");
-
-            setPlaybackStatus(`${chunkStatus} (browser voice)`);
-            setLoadingUrl(null);
-            await speakChunkWithBrowserVoice(chunks[index]);
           }
         }
 
+        playbackAbortRef.current = null;
         if (playbackSessionRef.current === sessionId) {
-          speechUsingBrowserVoiceRef.current = false;
           setPlayingUrl(null);
           setPlaybackStatus(null);
           setLoadingUrl(null);
@@ -467,10 +396,10 @@ export default function SubstackPage() {
       }
     },
     [
+      getRealtimeToken,
       loadArticle,
       playingUrl,
       revokeAudioBlobUrl,
-      speakChunkWithBrowserVoice,
       stopPlayback,
       waitForAudioToFinish,
     ]
