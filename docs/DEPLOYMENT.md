@@ -89,6 +89,16 @@ npm run cap:android
 - A **Tasker plugin** is included: `android/.../TaskerPlugin.java` broadcasts this intent; `MainActivity` registers it. After you run the app from Android Studio (or build a new APK), the app will call Tasker via the plugin when the API returns a `taskerCommand`.
 - On the tablet, in **Tasker**, create a profile: **Event** → **Intent Received** → Action `com.jesse.assistant.COMMAND`. Use `%task` and `%value` in your task. See **[docs/TASKER_SETUP.md](TASKER_SETUP.md)** for step-by-step and examples.
 
+## After code changes (e.g. fixes for Read with Ara)
+
+1. **Push to production** — Commit and push so Vercel deploys the latest API (e.g. `/api/substack/article-content`, `/api/substack/article-audio`). The tablet calls these on the Vercel host when `NEXT_PUBLIC_ASSISTANT_API_URL` is set.
+2. **Rebuild for Android** — So the bundled app has the latest client code and still points at the live API:
+   - In this repo, ensure `.env.local` has `NEXT_PUBLIC_ASSISTANT_API_URL=https://your-app.vercel.app` (no trailing slash).
+   - Run: `npm run cap:android` (or `npm run build:cap && npx cap sync android` then open Android Studio).
+   - Build and install the app on the tablet.
+
+Without pushing to prod first, the Android app may call an older API. Without rebuilding the app, the tablet keeps old JS and may still hit bugs (e.g. parsing HTML as JSON).
+
 ## Summary
 
 | Environment      | Frontend source     | API / backend          |

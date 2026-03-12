@@ -77,6 +77,11 @@ function splitTextForAra(text: string): string[] {
   return chunks;
 }
 
+function getApiBase(): string {
+  if (typeof window === "undefined") return "";
+  return (process.env.NEXT_PUBLIC_ASSISTANT_API_URL ?? "").replace(/\/$/, "");
+}
+
 interface LoadedArticle {
   title: string | null;
   content: string;
@@ -144,16 +149,34 @@ export default function SubstackPage() {
     setModalError(null);
     setModalContent("");
 
-    const response = await fetch(
-      `/api/substack/article-content/?url=${encodeURIComponent(article.link)}`,
-      { cache: "no-store" }
-    );
+    const base = getApiBase();
+    const contentUrl = base
+      ? `${base}/api/substack/article-content/?url=${encodeURIComponent(article.link)}`
+      : `/api/substack/article-content/?url=${encodeURIComponent(article.link)}`;
+    const response = await fetch(contentUrl, { cache: "no-store" });
 
-    const data = (await response.json()) as {
-      title?: string | null;
-      content?: string;
-      error?: string;
-    };
+    // #region agent log
+    const rawBody = await response.text();
+    let data: { title?: string | null; content?: string; error?: string };
+    try {
+      data = JSON.parse(rawBody) as typeof data;
+    } catch (parseErr) {
+      const bodyStart = rawBody.trimStart().slice(0, 120);
+      fetch("http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "651c00" },
+        body: JSON.stringify({
+          sessionId: "651c00",
+          location: "substack/page.tsx:loadArticle",
+          message: "article-content response was not JSON",
+          data: { status: response.status, contentType: response.headers.get("content-type"), bodyStart },
+          timestamp: Date.now(),
+          hypothesisId: "A",
+        }),
+      }).catch(() => {});
+      throw new Error("Could not load the full article.");
+    }
+    // #endregion
 
     if (!response.ok) {
       throw new Error(data.error || "Could not load the full article.");
@@ -332,7 +355,8 @@ export default function SubstackPage() {
 
         setPlayingUrl(article.link);
 
-        const audioApiUrl = "/api/substack/article-audio/";
+        const base = getApiBase();
+        const audioApiUrl = base ? `${base}/api/substack/article-audio/` : "/api/substack/article-audio/";
         let useBrowserVoiceFallback = false;
         for (let index = 0; index < chunks.length; index += 1) {
           if (playbackSessionRef.current !== sessionId) {
@@ -364,8 +388,27 @@ export default function SubstackPage() {
 
             const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
             if (!response.ok) {
-              const data = (await response.json().catch(() => ({}))) as { error?: string };
-              throw new Error(data.error || "Ara voice is unavailable.");
+              const errorBody = await response.text();
+              let errData: { error?: string } = {};
+              try {
+                if (errorBody.trimStart().startsWith("{")) errData = JSON.parse(errorBody) as { error?: string };
+              } catch {
+                // #region agent log
+                fetch("http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "651c00" },
+                  body: JSON.stringify({
+                    sessionId: "651c00",
+                    location: "substack/page.tsx:article-audio",
+                    message: "article-audio error response was not JSON",
+                    data: { status: response.status, contentType, bodyStart: errorBody.trimStart().slice(0, 120) },
+                    timestamp: Date.now(),
+                    hypothesisId: "B",
+                  }),
+                }).catch(() => {});
+                // #endregion
+              }
+              throw new Error(errData.error || "Ara voice is unavailable.");
             }
 
             if (!contentType.includes("audio")) {
