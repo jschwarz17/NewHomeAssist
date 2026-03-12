@@ -125,7 +125,7 @@ export function speakWithAraRealtime(options: AraReadAloudOptions): Promise<void
             if (data.delta && outputContext) {
               const float32 = base64PCM16ToFloat32(data.delta);
               const buffer = outputContext.createBuffer(1, float32.length, SAMPLE_RATE);
-              buffer.copyToChannel(float32, 0);
+              buffer.copyToChannel(new Float32Array(float32), 0);
               const node = outputContext.createBufferSource();
               node.buffer = buffer;
               node.connect(outputContext.destination);
