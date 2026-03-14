@@ -30,7 +30,7 @@ export function DebugLogOverlay() {
     return (
       <button
         onClick={() => { setOpen(true); loadLogs(); }}
-        style={{ position: "fixed", bottom: 4, left: 4, zIndex: 99999, background: "#333", color: "#0f0", border: "1px solid #555", borderRadius: 4, padding: "2px 6px", fontSize: 10, opacity: 0.6 }}
+        style={{ position: "fixed", bottom: 20, left: 20, zIndex: 2147483647, background: "#ff0000", color: "#ffffff", border: "2px solid #fff", borderRadius: 8, padding: "10px 18px", fontSize: 18, fontWeight: "bold", opacity: 1, boxShadow: "0 0 20px rgba(255,0,0,0.8)" }}
       >
         DBG
       </button>
