@@ -68,7 +68,7 @@ export interface SpotifySearchResult {
   uri: string;
   name: string;
   artist?: string;
-  type: "track" | "album" | "playlist";
+  type: "track" | "album" | "playlist" | "artist";
 }
 
 /**
@@ -106,7 +106,11 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
     return { uri: playlist.uri, name: playlist.name, type: "playlist" };
   }
 
-  if (artist && lowerQuery.includes(artist.name.toLowerCase())) {
+  const isArtistRadio = /\bradio\b/i.test(lowerQuery);
+  if (artist && (lowerQuery.includes(artist.name.toLowerCase()) || isArtistRadio)) {
+    if (isArtistRadio) {
+      return { uri: artist.uri, name: artist.name, type: "artist" };
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const artistTrack = data.tracks?.items?.find((t: any) =>
       t.artists?.some((a: any) => a.id === artist.id)
@@ -114,7 +118,7 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
     if (artistTrack) {
       return { uri: artistTrack.uri, name: artistTrack.name, artist: artist.name, type: "track" };
     }
-    return { uri: artist.uri, name: artist.name, type: "artist" as "track" };
+    return { uri: artist.uri, name: artist.name, type: "artist" };
   }
 
   if (track) {
@@ -129,7 +133,7 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
     if (artistTrack) {
       return { uri: artistTrack.uri, name: artistTrack.name, artist: artist.name, type: "track" };
     }
-    return { uri: artist.uri, name: artist.name, type: "artist" as "track" };
+    return { uri: artist.uri, name: artist.name, type: "artist" };
   }
 
   if (playlist) {
@@ -248,4 +252,39 @@ export async function playOnDevice(
   }
 
   return `Playing "${searchResult.name}" on ${targetDevice.name}`;
+}
+
+/**
+ * Fetch track recommendations (song radio) and add them to the current playback queue.
+ * Call after starting a single track so playback continues with similar songs.
+ */
+export async function addTrackRadioToQueue(
+  trackUri: string,
+  apiBaseUrl: string,
+  deviceId?: string
+): Promise<void> {
+  const token = await getAccessToken(apiBaseUrl);
+  const trackId = trackUri.replace("spotify:track:", "");
+  if (!trackId || trackId === trackUri) return;
+
+  const recRes = await fetch(
+    `${SPOTIFY_API}/recommendations?seed_tracks=${encodeURIComponent(trackId)}&limit=20`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!recRes.ok) return;
+  const recData = (await recRes.json()) as { tracks?: Array<{ uri?: string }> };
+  const uris = (recData.tracks ?? []).map((t) => t.uri).filter(Boolean) as string[];
+
+  const deviceParam = deviceId ? `&device_id=${encodeURIComponent(deviceId)}` : "";
+  for (const uri of uris.slice(0, 15)) {
+    try {
+      const qRes = await fetch(
+        `${SPOTIFY_API}/me/player/queue?uri=${encodeURIComponent(uri)}${deviceParam}`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!qRes.ok) break;
+    } catch {
+      break;
+    }
+  }
 }

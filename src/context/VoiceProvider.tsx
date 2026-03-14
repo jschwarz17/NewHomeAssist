@@ -211,15 +211,31 @@ export function VoiceProvider({
               } catch (e) {
                 return `Spotify search failed: ${e instanceof Error ? e.message : String(e)}`;
               }
+              const isContext = searchResult.type === "playlist" || searchResult.type === "album" || searchResult.type === "artist";
+              if (isContext) {
+                try {
+                  return await spotify.playOnDevice(searchResult, device, apiBaseUrl);
+                } catch (e) {
+                  errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
+                }
+                try {
+                  return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                } catch (e) {
+                  errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
+                }
+                return `Could not play "${searchResult.name}". ${errors.join(". ")}`;
+              }
+              try {
+                const result = await spotify.playOnDevice(searchResult, device, apiBaseUrl);
+                spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
+                return result;
+              } catch (e) {
+                errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
+              }
               try {
                 return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
               } catch (e) {
                 errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
-              }
-              try {
-                return await spotify.playOnDevice(searchResult, device, apiBaseUrl);
-              } catch (e) {
-                errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
               }
               return `Could not play "${searchResult.name}". ${errors.join(". ")}`;
             }
@@ -249,8 +265,11 @@ export function VoiceProvider({
               return `Stopped music in ${playing[0].name}.`;
             }
 
-            const contentIds = new Set(playing.map(s => s.contentId));
-            if (contentIds.size <= 1) {
+            // Only treat as "different music" when we have 2+ distinct non-empty content IDs.
+            // Grouped speakers often report same stream; slaves may have empty contentId.
+            const nonEmptyIds = playing.map(s => s.contentId).filter(Boolean);
+            const uniqueContentIds = new Set(nonEmptyIds);
+            if (uniqueContentIds.size <= 1) {
               for (const s of playing) {
                 await sonos.pause(s.name);
               }
@@ -423,7 +442,21 @@ export function VoiceProvider({
               try {
                 if (spotify?.isLoggedIn?.()) {
                   const searchResult = await spotify.search(query, apiBaseUrl);
-                  await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                  const isContext = searchResult.type === "playlist" || searchResult.type === "album" || searchResult.type === "artist";
+                  if (isContext) {
+                    try {
+                      await spotify.playOnDevice(searchResult, device, apiBaseUrl);
+                    } catch {
+                      await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                    }
+                  } else {
+                    try {
+                      await spotify.playOnDevice(searchResult, device, apiBaseUrl);
+                      spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
+                    } catch {
+                      await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                    }
+                  }
                 } else {
                   await sonos.play(device);
                 }
