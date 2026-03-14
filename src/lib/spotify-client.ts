@@ -4,6 +4,21 @@
  * Uses Spotify Connect to play on Sonos speakers directly.
  */
 
+// #region agent log
+const DBG_KEY = 'ara_debug_fe7a63';
+function dbgLog(loc: string, msg: string, data: Record<string, unknown>) {
+  try {
+    const logs = JSON.parse(localStorage.getItem(DBG_KEY) || '[]');
+    logs.push({ t: Date.now(), loc, msg, data });
+    localStorage.setItem(DBG_KEY, JSON.stringify(logs));
+  } catch {}
+  try {
+    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fe7a63'},body:JSON.stringify({sessionId:'fe7a63',location:loc,message:msg,data,timestamp:Date.now()})}).catch(()=>{});
+  } catch {}
+}
+export { DBG_KEY, dbgLog };
+// #endregion
+
 const STORAGE_KEY = "spotify_tokens";
 const SPOTIFY_API = "https://api.spotify.com/v1";
 
@@ -267,22 +282,41 @@ export async function addTrackRadioToQueue(
   deviceId?: string
 ): Promise<void> {
   // #region agent log
-  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'spotify-client.ts:addTrackRadioToQueue',message:'addTrackRadioToQueue called',data:{trackUri,hasDeviceId:!!deviceId},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  dbgLog('addTrackRadioToQueue:entry', 'called', { trackUri, hasDeviceId: !!deviceId });
   // #endregion
   const token = await getAccessToken(apiBaseUrl);
   const trackId = trackUri.replace("spotify:track:", "");
-  if (!trackId || trackId === trackUri) return;
+  if (!trackId || trackId === trackUri) {
+    // #region agent log
+    dbgLog('addTrackRadioToQueue:badUri', 'not a track URI, aborting', { trackUri, trackId });
+    // #endregion
+    return;
+  }
 
   const recRes = await fetch(
     `${SPOTIFY_API}/recommendations?seed_tracks=${encodeURIComponent(trackId)}&limit=20`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  if (!recRes.ok) return;
+  // #region agent log
+  dbgLog('addTrackRadioToQueue:recResponse', 'recommendations API response', { status: recRes.status, ok: recRes.ok });
+  // #endregion
+  if (!recRes.ok) {
+    // #region agent log
+    let errBody = '';
+    try { errBody = await recRes.clone().text(); } catch {}
+    dbgLog('addTrackRadioToQueue:recFailed', 'recommendations API FAILED', { status: recRes.status, body: errBody.slice(0, 500) });
+    // #endregion
+    return;
+  }
   const recData = (await recRes.json()) as { tracks?: Array<{ uri?: string }> };
   const uris = (recData.tracks ?? []).map((t) => t.uri).filter(Boolean) as string[];
+  // #region agent log
+  dbgLog('addTrackRadioToQueue:recParsed', 'recommendations parsed', { trackCount: recData.tracks?.length ?? 0, uriCount: uris.length, firstUri: uris[0] ?? null });
+  // #endregion
 
   const deviceParam = deviceId ? `&device_id=${encodeURIComponent(deviceId)}` : "";
   let firstStatus: number | undefined;
+  let queuedOk = 0;
   for (const uri of uris.slice(0, 15)) {
     try {
       const qRes = await fetch(
@@ -290,12 +324,23 @@ export async function addTrackRadioToQueue(
         { method: "POST", headers: { Authorization: `Bearer ${token}` } }
       );
       if (firstStatus === undefined) firstStatus = qRes.status;
-      if (!qRes.ok) break;
-    } catch {
+      if (!qRes.ok) {
+        // #region agent log
+        let qBody = '';
+        try { qBody = await qRes.clone().text(); } catch {}
+        dbgLog('addTrackRadioToQueue:queueFailed', 'queue POST failed', { status: qRes.status, body: qBody.slice(0, 300), uri });
+        // #endregion
+        break;
+      }
+      queuedOk++;
+    } catch (e) {
+      // #region agent log
+      dbgLog('addTrackRadioToQueue:queueError', 'queue POST threw', { error: e instanceof Error ? e.message : String(e) });
+      // #endregion
       break;
     }
   }
   // #region agent log
-  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'spotify-client.ts:addTrackRadioToQueue',message:'addTrackRadioToQueue first queue response',data:{firstStatus,queuedCount:uris.length},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+  dbgLog('addTrackRadioToQueue:done', 'finished', { firstStatus, queuedOk, totalUris: uris.length });
   // #endregion
 }

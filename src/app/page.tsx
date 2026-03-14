@@ -6,14 +6,13 @@ import { StockPricesWidget } from "@/components/dashboard/StockPricesWidget";
 import { GlamourCoverWidget } from "@/components/dashboard/GlamourCoverWidget";
 import { HealthyBabyTipsWidget } from "@/components/dashboard/HealthyBabyTipsWidget";
 import { ElegantShoesWidget } from "@/components/dashboard/ElegantShoesWidget";
+import { HomeTitleWithLock } from "@/components/HomeTitleWithLock";
 
 export default function HomePage() {
   return (
     <main className="h-screen bg-black text-white font-sans px-6 pt-3 pb-2 flex flex-col overflow-hidden">
-      {/* Title */}
-      <h1 className="text-3xl font-extralight tracking-tight text-center mb-3">
-        Casa de los Schwarzes
-      </h1>
+      {/* Title — drag down to show CasaDe.ai lock screen */}
+      <HomeTitleWithLock />
 
       {/* Dashboard grid: 3 columns — Jesse | Vane | Voice */}
       <div className="flex-1 grid grid-cols-[1fr_1fr_140px] gap-x-6 min-h-0">
@@ -41,21 +40,24 @@ export default function HomePage() {
         <section className="flex flex-col min-h-0 gap-2">
           <Link
             href="/shows"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center block leading-tight"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex items-center justify-center gap-2 leading-tight"
           >
-            🎬 Movies &amp; Shows
+            <img src="/icons/icon-movies.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
+            Movies &amp; Shows
           </Link>
           <Link
             href="/artists"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center block leading-tight"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex items-center justify-center gap-2 leading-tight"
           >
-            🎸 Artists
+            <img src="/icons/icon-artists.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
+            Artists
           </Link>
           <Link
             href="/substack"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center block leading-tight"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex items-center justify-center gap-2 leading-tight"
           >
-            📰 Articles
+            <img src="/icons/icon-articles.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
+            Articles
           </Link>
           <VoicePanel />
         </section>

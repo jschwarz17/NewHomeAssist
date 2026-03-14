@@ -212,6 +212,9 @@ export function VoiceProvider({
                 return `Spotify search failed: ${e instanceof Error ? e.message : String(e)}`;
               }
               const isContext = searchResult.type === "playlist" || searchResult.type === "album" || searchResult.type === "artist";
+              // #region agent log
+              spotify.dbgLog('onPlayMusic:search', 'search result', { query, device, searchName: searchResult.name, searchType: searchResult.type, searchUri: searchResult.uri, isContext });
+              // #endregion
               if (isContext) {
                 try {
                   return await spotify.playOnDevice(searchResult, device, apiBaseUrl);
@@ -227,9 +230,19 @@ export function VoiceProvider({
               }
               try {
                 const result = await spotify.playOnDevice(searchResult, device, apiBaseUrl);
-                spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
+                // #region agent log
+                spotify.dbgLog('onPlayMusic:playOk', 'playOnDevice succeeded, calling addTrackRadioToQueue', { trackUri: searchResult.uri, result });
+                // #endregion
+                spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch((e) => {
+                  // #region agent log
+                  spotify.dbgLog('onPlayMusic:radioFailed', 'addTrackRadioToQueue REJECTED', { error: e instanceof Error ? e.message : String(e) });
+                  // #endregion
+                });
                 return result;
               } catch (e) {
+                // #region agent log
+                spotify.dbgLog('onPlayMusic:connectFailed', 'playOnDevice THREW - falling to Sonos', { error: e instanceof Error ? e.message : String(e) });
+                // #endregion
                 errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
               }
               try {
