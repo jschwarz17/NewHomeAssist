@@ -250,11 +250,7 @@ export function VoiceProvider({
                 // #region agent log
                 spotify.dbgLog('onPlayMusic:sonosOk', 'Sonos UPnP played, queueing radio via Sonos', { uri: searchResult.uri, device });
                 // #endregion
-                spotify.queueRadioViaSonos(searchResult.uri, searchResult.name, apiBaseUrl, device).catch((e) => {
-                  // #region agent log
-                  spotify.dbgLog('onPlayMusic:sonosRadioFailed', 'queueRadioViaSonos REJECTED', { error: e instanceof Error ? e.message : String(e) });
-                  // #endregion
-                });
+                spotify.startRadioOnSonos(searchResult.uri, searchResult.name, device).catch(() => {});
                 return sonosResult;
               } catch (e) {
                 errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
@@ -483,7 +479,7 @@ export function VoiceProvider({
                       spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
                     } catch {
                       await sonos.playSpotify(searchResult.uri, searchResult.name, device);
-                      spotify.queueRadioViaSonos(searchResult.uri, searchResult.name, apiBaseUrl, device).catch(() => {});
+                      spotify.startRadioOnSonos(searchResult.uri, searchResult.name, device).catch(() => {});
                     }
                   }
                 } else {

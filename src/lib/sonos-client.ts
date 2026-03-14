@@ -710,41 +710,29 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export async function clearQueue(roomName?: string): Promise<void> {
+/**
+ * Start a Spotify radio station on Sonos based on any Spotify URI (track, artist, etc.).
+ * Sonos handles continuous playback natively via x-sonosapi-radio.
+ */
+export async function playSpotifyRadio(spotifyUri: string, title: string, roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
-  if (!speaker) return;
-  const ip = await resolveTargetIp(speaker.ip);
-  await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "RemoveAllTracksFromQueue", "<InstanceID>0</InstanceID>");
-}
-
-export async function addSpotifyTrackToQueue(spotifyUri: string, title: string, roomName?: string): Promise<void> {
-  const speaker = findSpeaker(roomName);
-  if (!speaker) return;
+  if (!speaker) throw new Error("No Sonos speakers configured.");
   const ip = await resolveTargetIp(speaker.ip);
   const svc = await getSpotifyServiceInfo(ip);
   const encodedUri = spotifyUri.replace(/:/g, "%3a");
-  const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8232&sn=${svc.sn}`;
-  const metadata = buildSpotifyMetadata(spotifyUri, title, svc);
+  const radioUri = `x-sonosapi-radio:${encodedUri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
+  const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const radioMeta =
+    `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
+    `<item id="100c206c${encodedUri}" parentID="0" restricted="true">` +
+    `<dc:title>${safeTitle} Radio</dc:title>` +
+    `<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>` +
+    `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">${svc.accountToken}</desc>` +
+    `</item></DIDL-Lite>`;
   await soapRequest(
-    ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "AddURIToQueue",
-    `<InstanceID>0</InstanceID><EnqueuedURI>${escapeXml(sonosUri)}</EnqueuedURI><EnqueuedURIMetaData>${escapeXml(metadata)}</EnqueuedURIMetaData><DesiredFirstTrackNumberEnqueued>0</DesiredFirstTrackNumberEnqueued><EnqueueAsNext>0</EnqueueAsNext>`
-  );
-}
-
-export async function startQueuePlayback(roomName?: string, trackNumber = 1): Promise<void> {
-  const speaker = findSpeaker(roomName);
-  if (!speaker) return;
-  const ip = await resolveTargetIp(speaker.ip);
-  const uuid = speaker.uuid ?? await getSpeakerUuid(ip);
-  if (uuid) {
-    await soapRequest(
-      ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
-      `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(`x-rincon-queue:${uuid}#0`)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
-    );
-  }
-  await soapRequest(
-    ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Seek",
-    `<InstanceID>0</InstanceID><Unit>TRACK_NR</Unit><Target>${trackNumber}</Target>`
+    ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+    `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(radioUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(radioMeta)}</CurrentURIMetaData>`
   );
   await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  return `Playing "${title}" radio on ${speaker.name}`;
 }
