@@ -353,30 +353,37 @@ async function getRadioTracks(
   trackId: string,
   token: string
 ): Promise<Array<{ uri: string; name: string }>> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const headers = { Authorization: `Bearer ${token}` } as any;
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   const radioTracks: Array<{ uri: string; name: string }> = [];
   const seenUris = new Set<string>();
 
   const trackRes = await fetch(`${SPOTIFY_API}/tracks/${encodeURIComponent(trackId)}`, { headers });
-  if (!trackRes.ok) {
-    // #region agent log
-    dbgLog('getRadioTracks:trackFailed', 'GET track failed', { status: trackRes.status });
-    // #endregion
-    return [];
-  }
+  // #region agent log
+  dbgLog('getRadioTracks:track', 'GET track', { status: trackRes.status, ok: trackRes.ok });
+  // #endregion
+  if (!trackRes.ok) return [];
   const trackData = await trackRes.json();
   const artistId = trackData.artists?.[0]?.id;
+  const artistName = trackData.artists?.[0]?.name;
+  // #region agent log
+  dbgLog('getRadioTracks:artist', 'extracted artist', { artistId, artistName });
+  // #endregion
   if (!artistId) return [];
 
   seenUris.add(`spotify:track:${trackId}`);
 
   const artistTopRes = await fetch(
-    `${SPOTIFY_API}/artists/${encodeURIComponent(artistId)}/top-tracks`,
+    `${SPOTIFY_API}/artists/${encodeURIComponent(artistId)}/top-tracks?market=US`,
     { headers }
   );
+  // #region agent log
+  dbgLog('getRadioTracks:topTracks', 'artist top-tracks', { status: artistTopRes.status, ok: artistTopRes.ok });
+  // #endregion
   if (artistTopRes.ok) {
     const topData = await artistTopRes.json();
+    // #region agent log
+    dbgLog('getRadioTracks:topTracksData', 'top tracks count', { count: topData.tracks?.length ?? 0 });
+    // #endregion
     for (const t of (topData.tracks ?? []).slice(0, 5)) {
       if (t.uri && t.name && !seenUris.has(t.uri)) {
         radioTracks.push({ uri: t.uri, name: t.name });
@@ -389,14 +396,20 @@ async function getRadioTracks(
     `${SPOTIFY_API}/artists/${encodeURIComponent(artistId)}/related-artists`,
     { headers }
   );
+  // #region agent log
+  dbgLog('getRadioTracks:related', 'related-artists', { status: relatedRes.status, ok: relatedRes.ok });
+  // #endregion
   if (relatedRes.ok) {
     const relData = await relatedRes.json();
     const relatedArtists = (relData.artists ?? []).slice(0, 5);
+    // #region agent log
+    dbgLog('getRadioTracks:relatedCount', 'related artists found', { count: relatedArtists.length, names: relatedArtists.map((a: { name: string }) => a.name) });
+    // #endregion
 
     for (const ra of relatedArtists) {
       try {
         const raTopRes = await fetch(
-          `${SPOTIFY_API}/artists/${encodeURIComponent(ra.id)}/top-tracks`,
+          `${SPOTIFY_API}/artists/${encodeURIComponent(ra.id)}/top-tracks?market=US`,
           { headers }
         );
         if (raTopRes.ok) {
