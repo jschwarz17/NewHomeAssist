@@ -709,3 +709,42 @@ function buildSpotifyMetadata(uri: string, title: string, svc: SpotifyServiceInf
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+
+export async function clearQueue(roomName?: string): Promise<void> {
+  const speaker = findSpeaker(roomName);
+  if (!speaker) return;
+  const ip = await resolveTargetIp(speaker.ip);
+  await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "RemoveAllTracksFromQueue", "<InstanceID>0</InstanceID>");
+}
+
+export async function addSpotifyTrackToQueue(spotifyUri: string, title: string, roomName?: string): Promise<void> {
+  const speaker = findSpeaker(roomName);
+  if (!speaker) return;
+  const ip = await resolveTargetIp(speaker.ip);
+  const svc = await getSpotifyServiceInfo(ip);
+  const encodedUri = spotifyUri.replace(/:/g, "%3a");
+  const sonosUri = `x-sonos-spotify:${encodedUri}?sid=${svc.sid}&flags=8232&sn=${svc.sn}`;
+  const metadata = buildSpotifyMetadata(spotifyUri, title, svc);
+  await soapRequest(
+    ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "AddURIToQueue",
+    `<InstanceID>0</InstanceID><EnqueuedURI>${escapeXml(sonosUri)}</EnqueuedURI><EnqueuedURIMetaData>${escapeXml(metadata)}</EnqueuedURIMetaData><DesiredFirstTrackNumberEnqueued>0</DesiredFirstTrackNumberEnqueued><EnqueueAsNext>0</EnqueueAsNext>`
+  );
+}
+
+export async function startQueuePlayback(roomName?: string, trackNumber = 1): Promise<void> {
+  const speaker = findSpeaker(roomName);
+  if (!speaker) return;
+  const ip = await resolveTargetIp(speaker.ip);
+  const uuid = speaker.uuid ?? await getSpeakerUuid(ip);
+  if (uuid) {
+    await soapRequest(
+      ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
+      `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(`x-rincon-queue:${uuid}#0`)}</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>`
+    );
+  }
+  await soapRequest(
+    ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Seek",
+    `<InstanceID>0</InstanceID><Unit>TRACK_NR</Unit><Target>${trackNumber}</Target>`
+  );
+  await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+}

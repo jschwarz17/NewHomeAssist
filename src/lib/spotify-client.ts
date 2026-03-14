@@ -344,3 +344,93 @@ export async function addTrackRadioToQueue(
   dbgLog('addTrackRadioToQueue:done', 'finished', { firstStatus, queuedOk, totalUris: uris.length });
   // #endregion
 }
+
+/**
+ * Queue a track radio via Sonos UPnP when Spotify Connect is unavailable.
+ * Clears the Sonos queue, adds the current track + recommendations, then
+ * switches transport to the queue so playback continues automatically.
+ */
+export async function queueRadioViaSonos(
+  trackUri: string,
+  trackName: string,
+  apiBaseUrl: string,
+  roomName?: string
+): Promise<void> {
+  // #region agent log
+  dbgLog('queueRadioViaSonos:entry', 'called', { trackUri, trackName, roomName });
+  // #endregion
+
+  const sonos = await import("@/lib/sonos-client");
+
+  const token = await getAccessToken(apiBaseUrl);
+  const trackId = trackUri.replace("spotify:track:", "");
+  if (!trackId || trackId === trackUri) {
+    // #region agent log
+    dbgLog('queueRadioViaSonos:badUri', 'not a track URI', { trackUri });
+    // #endregion
+    return;
+  }
+
+  const recRes = await fetch(
+    `${SPOTIFY_API}/recommendations?seed_tracks=${encodeURIComponent(trackId)}&limit=20`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  // #region agent log
+  dbgLog('queueRadioViaSonos:recResponse', 'recommendations API', { status: recRes.status, ok: recRes.ok });
+  // #endregion
+  if (!recRes.ok) {
+    let errBody = '';
+    try { errBody = await recRes.clone().text(); } catch {}
+    // #region agent log
+    dbgLog('queueRadioViaSonos:recFailed', 'recommendations FAILED', { status: recRes.status, body: errBody.slice(0, 500) });
+    // #endregion
+    return;
+  }
+
+  const recData = (await recRes.json()) as { tracks?: Array<{ uri?: string; name?: string }> };
+  const recommended = (recData.tracks ?? []).filter((t): t is { uri: string; name: string } => !!t.uri && !!t.name);
+  // #region agent log
+  dbgLog('queueRadioViaSonos:recParsed', 'got recommendations', { count: recommended.length, first: recommended[0]?.name ?? null });
+  // #endregion
+  if (!recommended.length) return;
+
+  try {
+    await sonos.clearQueue(roomName);
+  } catch {
+    // #region agent log
+    dbgLog('queueRadioViaSonos:clearFailed', 'clearQueue failed, continuing', {});
+    // #endregion
+  }
+
+  let queued = 0;
+  try {
+    await sonos.addSpotifyTrackToQueue(trackUri, trackName, roomName);
+    queued++;
+  } catch (e) {
+    // #region agent log
+    dbgLog('queueRadioViaSonos:mainTrackFailed', 'failed to queue main track', { error: e instanceof Error ? e.message : String(e) });
+    // #endregion
+    return;
+  }
+
+  for (const track of recommended.slice(0, 15)) {
+    try {
+      await sonos.addSpotifyTrackToQueue(track.uri, track.name, roomName);
+      queued++;
+    } catch {
+      break;
+    }
+  }
+
+  try {
+    await sonos.startQueuePlayback(roomName, 1);
+  } catch (e) {
+    // #region agent log
+    dbgLog('queueRadioViaSonos:startFailed', 'startQueuePlayback failed', { error: e instanceof Error ? e.message : String(e) });
+    // #endregion
+  }
+
+  // #region agent log
+  dbgLog('queueRadioViaSonos:done', 'finished', { queued, totalRecommended: recommended.length });
+  // #endregion
+}

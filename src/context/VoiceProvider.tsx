@@ -246,7 +246,16 @@ export function VoiceProvider({
                 errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
               }
               try {
-                return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                const sonosResult = await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                // #region agent log
+                spotify.dbgLog('onPlayMusic:sonosOk', 'Sonos UPnP played, queueing radio via Sonos', { uri: searchResult.uri, device });
+                // #endregion
+                spotify.queueRadioViaSonos(searchResult.uri, searchResult.name, apiBaseUrl, device).catch((e) => {
+                  // #region agent log
+                  spotify.dbgLog('onPlayMusic:sonosRadioFailed', 'queueRadioViaSonos REJECTED', { error: e instanceof Error ? e.message : String(e) });
+                  // #endregion
+                });
+                return sonosResult;
               } catch (e) {
                 errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
               }
@@ -473,10 +482,8 @@ export function VoiceProvider({
                       await spotify.playOnDevice(searchResult, device, apiBaseUrl);
                       spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
                     } catch {
-                      // #region agent log
-                      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'VoiceProvider.tsx:sonos_play',message:'playOnDevice failed, using sonos fallback (track)',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-                      // #endregion
                       await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                      spotify.queueRadioViaSonos(searchResult.uri, searchResult.name, apiBaseUrl, device).catch(() => {});
                     }
                   }
                 } else {
