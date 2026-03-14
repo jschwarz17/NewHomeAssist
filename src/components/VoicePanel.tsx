@@ -20,7 +20,7 @@ export function VoicePanel() {
   const [showSettings, setShowSettings] = useState(false);
 
   return (
-    <div className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-3 h-full flex flex-col items-center justify-center text-center gap-3">
+    <div className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-3 h-[160px] min-h-0 flex flex-col items-center justify-center text-center gap-2 flex-shrink-0">
       {error && (
         <p className="text-red-400 text-[10px] leading-snug">{error}</p>
       )}

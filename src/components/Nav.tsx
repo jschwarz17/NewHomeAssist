@@ -9,17 +9,14 @@ export function Nav() {
       <Link href="/dashboard" className="text-zinc-400 hover:text-zinc-100 transition-colors">
         Dashboard
       </Link>
-      <Link href="/devices" className="text-zinc-400 hover:text-zinc-100 transition-colors">
-        Devices
-      </Link>
-      <Link href="/routines" className="text-zinc-400 hover:text-zinc-100 transition-colors">
-        Routines
-      </Link>
       <Link href="/shows" className="text-zinc-400 hover:text-zinc-100 transition-colors">
         Shows
       </Link>
       <Link href="/artists" className="text-zinc-400 hover:text-zinc-100 transition-colors">
         Artists
+      </Link>
+      <Link href="/substack" className="text-zinc-400 hover:text-zinc-100 transition-colors">
+        Articles
       </Link>
       <Link href="/settings" className="text-zinc-400 hover:text-zinc-100 transition-colors">
         Settings

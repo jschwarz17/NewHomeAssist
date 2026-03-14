@@ -40,23 +40,23 @@ export default function HomePage() {
         <section className="flex flex-col min-h-0 gap-2">
           <Link
             href="/shows"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex items-center justify-center gap-2 leading-tight"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-3 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex flex-col items-center justify-center gap-1.5 leading-tight min-h-[80px]"
           >
-            <img src="/icons/icon-movies.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
+            <img src="/icons/icon-movies.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
             Movies &amp; Shows
           </Link>
           <Link
             href="/artists"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex items-center justify-center gap-2 leading-tight"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-3 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex flex-col items-center justify-center gap-1.5 leading-tight min-h-[80px]"
           >
-            <img src="/icons/icon-artists.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
+            <img src="/icons/icon-artists.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
             Artists
           </Link>
           <Link
             href="/substack"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2.5 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex items-center justify-center gap-2 leading-tight"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-3 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex flex-col items-center justify-center gap-1.5 leading-tight min-h-[80px]"
           >
-            <img src="/icons/icon-articles.png" alt="" className="h-4 w-4 shrink-0 object-contain" />
+            <img src="/icons/icon-articles.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
             Articles
           </Link>
           <VoicePanel />
