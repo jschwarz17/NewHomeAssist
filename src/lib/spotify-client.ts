@@ -346,8 +346,84 @@ export async function addTrackRadioToQueue(
 }
 
 /**
+ * Build a radio-like track list using related artists + top tracks.
+ * Replaces the deprecated /recommendations endpoint.
+ */
+async function getRadioTracks(
+  trackId: string,
+  token: string
+): Promise<Array<{ uri: string; name: string }>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const headers = { Authorization: `Bearer ${token}` } as any;
+  const radioTracks: Array<{ uri: string; name: string }> = [];
+  const seenUris = new Set<string>();
+
+  const trackRes = await fetch(`${SPOTIFY_API}/tracks/${encodeURIComponent(trackId)}`, { headers });
+  if (!trackRes.ok) {
+    // #region agent log
+    dbgLog('getRadioTracks:trackFailed', 'GET track failed', { status: trackRes.status });
+    // #endregion
+    return [];
+  }
+  const trackData = await trackRes.json();
+  const artistId = trackData.artists?.[0]?.id;
+  if (!artistId) return [];
+
+  seenUris.add(`spotify:track:${trackId}`);
+
+  const artistTopRes = await fetch(
+    `${SPOTIFY_API}/artists/${encodeURIComponent(artistId)}/top-tracks`,
+    { headers }
+  );
+  if (artistTopRes.ok) {
+    const topData = await artistTopRes.json();
+    for (const t of (topData.tracks ?? []).slice(0, 5)) {
+      if (t.uri && t.name && !seenUris.has(t.uri)) {
+        radioTracks.push({ uri: t.uri, name: t.name });
+        seenUris.add(t.uri);
+      }
+    }
+  }
+
+  const relatedRes = await fetch(
+    `${SPOTIFY_API}/artists/${encodeURIComponent(artistId)}/related-artists`,
+    { headers }
+  );
+  if (relatedRes.ok) {
+    const relData = await relatedRes.json();
+    const relatedArtists = (relData.artists ?? []).slice(0, 5);
+
+    for (const ra of relatedArtists) {
+      try {
+        const raTopRes = await fetch(
+          `${SPOTIFY_API}/artists/${encodeURIComponent(ra.id)}/top-tracks`,
+          { headers }
+        );
+        if (raTopRes.ok) {
+          const raTopData = await raTopRes.json();
+          for (const t of (raTopData.tracks ?? []).slice(0, 3)) {
+            if (t.uri && t.name && !seenUris.has(t.uri)) {
+              radioTracks.push({ uri: t.uri, name: t.name });
+              seenUris.add(t.uri);
+            }
+          }
+        }
+      } catch { /* skip this artist */ }
+    }
+  }
+
+  // Shuffle to feel more like radio
+  for (let i = radioTracks.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [radioTracks[i], radioTracks[j]] = [radioTracks[j], radioTracks[i]];
+  }
+
+  return radioTracks.slice(0, 20);
+}
+
+/**
  * Queue a track radio via Sonos UPnP when Spotify Connect is unavailable.
- * Clears the Sonos queue, adds the current track + recommendations, then
+ * Clears the Sonos queue, adds the current track + related tracks, then
  * switches transport to the queue so playback continues automatically.
  */
 export async function queueRadioViaSonos(
@@ -371,26 +447,9 @@ export async function queueRadioViaSonos(
     return;
   }
 
-  const recRes = await fetch(
-    `${SPOTIFY_API}/recommendations?seed_tracks=${encodeURIComponent(trackId)}&limit=20`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  const recommended = await getRadioTracks(trackId, token);
   // #region agent log
-  dbgLog('queueRadioViaSonos:recResponse', 'recommendations API', { status: recRes.status, ok: recRes.ok });
-  // #endregion
-  if (!recRes.ok) {
-    let errBody = '';
-    try { errBody = await recRes.clone().text(); } catch {}
-    // #region agent log
-    dbgLog('queueRadioViaSonos:recFailed', 'recommendations FAILED', { status: recRes.status, body: errBody.slice(0, 500) });
-    // #endregion
-    return;
-  }
-
-  const recData = (await recRes.json()) as { tracks?: Array<{ uri?: string; name?: string }> };
-  const recommended = (recData.tracks ?? []).filter((t): t is { uri: string; name: string } => !!t.uri && !!t.name);
-  // #region agent log
-  dbgLog('queueRadioViaSonos:recParsed', 'got recommendations', { count: recommended.length, first: recommended[0]?.name ?? null });
+  dbgLog('queueRadioViaSonos:radioTracks', 'built radio list', { count: recommended.length, first: recommended[0]?.name ?? null, names: recommended.slice(0, 5).map(t => t.name) });
   // #endregion
   if (!recommended.length) return;
 
@@ -417,7 +476,10 @@ export async function queueRadioViaSonos(
     try {
       await sonos.addSpotifyTrackToQueue(track.uri, track.name, roomName);
       queued++;
-    } catch {
+    } catch (e) {
+      // #region agent log
+      dbgLog('queueRadioViaSonos:queueTrackFailed', 'failed to queue track', { name: track.name, error: e instanceof Error ? e.message : String(e) });
+      // #endregion
       break;
     }
   }
