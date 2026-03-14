@@ -346,8 +346,9 @@ export async function addTrackRadioToQueue(
 }
 
 /**
- * Build a radio-like track list using related artists + top tracks.
- * Replaces the deprecated /recommendations endpoint.
+ * Build a radio-like track list using Spotify Search API.
+ * Uses multiple search strategies since /recommendations, /top-tracks,
+ * and /related-artists are all restricted in Development mode.
  */
 async function getRadioTracks(
   trackId: string,
@@ -363,67 +364,52 @@ async function getRadioTracks(
   // #endregion
   if (!trackRes.ok) return [];
   const trackData = await trackRes.json();
-  const artistId = trackData.artists?.[0]?.id;
   const artistName = trackData.artists?.[0]?.name;
+  const trackName = trackData.name;
+  const albumName = trackData.album?.name;
   // #region agent log
-  dbgLog('getRadioTracks:artist', 'extracted artist', { artistId, artistName });
+  dbgLog('getRadioTracks:info', 'track info', { artistName, trackName, albumName });
   // #endregion
-  if (!artistId) return [];
+  if (!artistName) return [];
 
   seenUris.add(`spotify:track:${trackId}`);
 
-  const artistTopRes = await fetch(
-    `${SPOTIFY_API}/artists/${encodeURIComponent(artistId)}/top-tracks?market=US`,
-    { headers }
-  );
-  // #region agent log
-  dbgLog('getRadioTracks:topTracks', 'artist top-tracks', { status: artistTopRes.status, ok: artistTopRes.ok });
-  // #endregion
-  if (artistTopRes.ok) {
-    const topData = await artistTopRes.json();
-    // #region agent log
-    dbgLog('getRadioTracks:topTracksData', 'top tracks count', { count: topData.tracks?.length ?? 0 });
-    // #endregion
-    for (const t of (topData.tracks ?? []).slice(0, 5)) {
-      if (t.uri && t.name && !seenUris.has(t.uri)) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const collectTracks = (items: any[], limit: number) => {
+    for (const t of items.slice(0, limit)) {
+      if (t?.uri && t?.name && !seenUris.has(t.uri)) {
         radioTracks.push({ uri: t.uri, name: t.name });
         seenUris.add(t.uri);
       }
     }
+  };
+
+  const searches = [
+    `artist:"${artistName}"`,
+    `artist:"${artistName}" NOT "${trackName}"`,
+    artistName,
+  ];
+
+  for (const q of searches) {
+    if (radioTracks.length >= 20) break;
+    try {
+      const res = await fetch(
+        `${SPOTIFY_API}/search?q=${encodeURIComponent(q)}&type=track&limit=20`,
+        { headers }
+      );
+      // #region agent log
+      dbgLog('getRadioTracks:search', 'search result', { query: q, status: res.status, ok: res.ok });
+      // #endregion
+      if (res.ok) {
+        const data = await res.json();
+        collectTracks(data.tracks?.items ?? [], 20);
+      }
+    } catch { /* skip */ }
   }
 
-  const relatedRes = await fetch(
-    `${SPOTIFY_API}/artists/${encodeURIComponent(artistId)}/related-artists`,
-    { headers }
-  );
   // #region agent log
-  dbgLog('getRadioTracks:related', 'related-artists', { status: relatedRes.status, ok: relatedRes.ok });
+  dbgLog('getRadioTracks:afterSearch', 'tracks after search', { count: radioTracks.length });
   // #endregion
-  if (relatedRes.ok) {
-    const relData = await relatedRes.json();
-    const relatedArtists = (relData.artists ?? []).slice(0, 5);
-    // #region agent log
-    dbgLog('getRadioTracks:relatedCount', 'related artists found', { count: relatedArtists.length, names: relatedArtists.map((a: { name: string }) => a.name) });
-    // #endregion
-
-    for (const ra of relatedArtists) {
-      try {
-        const raTopRes = await fetch(
-          `${SPOTIFY_API}/artists/${encodeURIComponent(ra.id)}/top-tracks?market=US`,
-          { headers }
-        );
-        if (raTopRes.ok) {
-          const raTopData = await raTopRes.json();
-          for (const t of (raTopData.tracks ?? []).slice(0, 3)) {
-            if (t.uri && t.name && !seenUris.has(t.uri)) {
-              radioTracks.push({ uri: t.uri, name: t.name });
-              seenUris.add(t.uri);
-            }
-          }
-        }
-      } catch { /* skip this artist */ }
-    }
-  }
 
   // Shuffle to feel more like radio
   for (let i = radioTracks.length - 1; i > 0; i--) {
