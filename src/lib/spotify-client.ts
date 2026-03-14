@@ -352,13 +352,15 @@ export async function addTrackRadioToQueue(
  */
 async function getRadioTracks(
   trackId: string,
-  token: string
+  apiBaseUrl: string
 ): Promise<Array<{ uri: string; name: string }>> {
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  const token = await getAccessToken(apiBaseUrl);
   const radioTracks: Array<{ uri: string; name: string }> = [];
   const seenUris = new Set<string>();
 
-  const trackRes = await fetch(`${SPOTIFY_API}/tracks/${encodeURIComponent(trackId)}`, { headers });
+  const trackRes = await fetch(`${SPOTIFY_API}/tracks/${encodeURIComponent(trackId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   // #region agent log
   dbgLog('getRadioTracks:track', 'GET track', { status: trackRes.status, ok: trackRes.ok });
   // #endregion
@@ -366,9 +368,8 @@ async function getRadioTracks(
   const trackData = await trackRes.json();
   const artistName = trackData.artists?.[0]?.name;
   const trackName = trackData.name;
-  const albumName = trackData.album?.name;
   // #region agent log
-  dbgLog('getRadioTracks:info', 'track info', { artistName, trackName, albumName });
+  dbgLog('getRadioTracks:info', 'track info', { artistName, trackName });
   // #endregion
   if (!artistName) return [];
 
@@ -385,30 +386,42 @@ async function getRadioTracks(
   };
 
   const searches = [
-    `artist:"${artistName}"`,
-    `artist:"${artistName}" NOT "${trackName}"`,
     artistName,
+    `${artistName} ${trackName}`,
   ];
 
   for (const q of searches) {
     if (radioTracks.length >= 20) break;
     try {
-      const res = await fetch(
-        `${SPOTIFY_API}/search?q=${encodeURIComponent(q)}&type=track&limit=20`,
-        { headers }
-      );
+      const searchUrl = `${SPOTIFY_API}/search?q=${encodeURIComponent(q)}&type=track,playlist,album,artist&limit=20`;
       // #region agent log
-      dbgLog('getRadioTracks:search', 'search result', { query: q, status: res.status, ok: res.ok });
+      dbgLog('getRadioTracks:searchUrl', 'about to search', { query: q, url: searchUrl });
       // #endregion
-      if (res.ok) {
-        const data = await res.json();
-        collectTracks(data.tracks?.items ?? [], 20);
+      const res = await fetch(searchUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        // #region agent log
+        let errBody = '';
+        try { errBody = await res.clone().text(); } catch {}
+        dbgLog('getRadioTracks:searchFail', 'search FAILED', { query: q, status: res.status, body: errBody.slice(0, 500) });
+        // #endregion
+        continue;
       }
-    } catch { /* skip */ }
+      const data = await res.json();
+      collectTracks(data.tracks?.items ?? [], 20);
+      // #region agent log
+      dbgLog('getRadioTracks:searchOk', 'search succeeded', { query: q, tracksFound: data.tracks?.items?.length ?? 0, totalCollected: radioTracks.length });
+      // #endregion
+    } catch (e) {
+      // #region agent log
+      dbgLog('getRadioTracks:searchError', 'search threw', { query: q, error: e instanceof Error ? e.message : String(e) });
+      // #endregion
+    }
   }
 
   // #region agent log
-  dbgLog('getRadioTracks:afterSearch', 'tracks after search', { count: radioTracks.length });
+  dbgLog('getRadioTracks:afterSearch', 'tracks after search', { count: radioTracks.length, names: radioTracks.slice(0, 5).map(t => t.name) });
   // #endregion
 
   // Shuffle to feel more like radio
@@ -437,7 +450,6 @@ export async function queueRadioViaSonos(
 
   const sonos = await import("@/lib/sonos-client");
 
-  const token = await getAccessToken(apiBaseUrl);
   const trackId = trackUri.replace("spotify:track:", "");
   if (!trackId || trackId === trackUri) {
     // #region agent log
@@ -446,7 +458,7 @@ export async function queueRadioViaSonos(
     return;
   }
 
-  const recommended = await getRadioTracks(trackId, token);
+  const recommended = await getRadioTracks(trackId, apiBaseUrl);
   // #region agent log
   dbgLog('queueRadioViaSonos:radioTracks', 'built radio list', { count: recommended.length, first: recommended[0]?.name ?? null, names: recommended.slice(0, 5).map(t => t.name) });
   // #endregion
