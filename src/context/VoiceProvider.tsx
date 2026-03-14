@@ -443,10 +443,16 @@ export function VoiceProvider({
                 if (spotify?.isLoggedIn?.()) {
                   const searchResult = await spotify.search(query, apiBaseUrl);
                   const isContext = searchResult.type === "playlist" || searchResult.type === "album" || searchResult.type === "artist";
+                  // #region agent log
+                  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'VoiceProvider.tsx:sonos_play',message:'search result before play',data:{query,type:searchResult.type,isContext,name:searchResult.name},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+                  // #endregion
                   if (isContext) {
                     try {
                       await spotify.playOnDevice(searchResult, device, apiBaseUrl);
                     } catch {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'VoiceProvider.tsx:sonos_play',message:'playOnDevice failed, using sonos fallback (context)',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+                      // #endregion
                       await sonos.playSpotify(searchResult.uri, searchResult.name, device);
                     }
                   } else {
@@ -454,6 +460,9 @@ export function VoiceProvider({
                       await spotify.playOnDevice(searchResult, device, apiBaseUrl);
                       spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
                     } catch {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'VoiceProvider.tsx:sonos_play',message:'playOnDevice failed, using sonos fallback (track)',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+                      // #endregion
                       await sonos.playSpotify(searchResult.uri, searchResult.name, device);
                     }
                   }

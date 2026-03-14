@@ -116,6 +116,9 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
       t.artists?.some((a: any) => a.id === artist.id)
     );
     if (artistTrack) {
+      // #region agent log
+      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'spotify-client.ts:search',message:'search returned track for artist query',data:{query,artistName:artist.name,type:'track',uri:artistTrack.uri},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       return { uri: artistTrack.uri, name: artistTrack.name, artist: artist.name, type: "track" };
     }
     return { uri: artist.uri, name: artist.name, type: "artist" };
@@ -263,6 +266,9 @@ export async function addTrackRadioToQueue(
   apiBaseUrl: string,
   deviceId?: string
 ): Promise<void> {
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'spotify-client.ts:addTrackRadioToQueue',message:'addTrackRadioToQueue called',data:{trackUri,hasDeviceId:!!deviceId},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
   const token = await getAccessToken(apiBaseUrl);
   const trackId = trackUri.replace("spotify:track:", "");
   if (!trackId || trackId === trackUri) return;
@@ -276,15 +282,20 @@ export async function addTrackRadioToQueue(
   const uris = (recData.tracks ?? []).map((t) => t.uri).filter(Boolean) as string[];
 
   const deviceParam = deviceId ? `&device_id=${encodeURIComponent(deviceId)}` : "";
+  let firstStatus: number | undefined;
   for (const uri of uris.slice(0, 15)) {
     try {
       const qRes = await fetch(
         `${SPOTIFY_API}/me/player/queue?uri=${encodeURIComponent(uri)}${deviceParam}`,
         { method: "POST", headers: { Authorization: `Bearer ${token}` } }
       );
+      if (firstStatus === undefined) firstStatus = qRes.status;
       if (!qRes.ok) break;
     } catch {
       break;
     }
   }
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'spotify-client.ts:addTrackRadioToQueue',message:'addTrackRadioToQueue first queue response',data:{firstStatus,queuedCount:uris.length},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+  // #endregion
 }
