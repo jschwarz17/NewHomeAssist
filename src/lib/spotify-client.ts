@@ -197,12 +197,18 @@ export async function playOnDevice(
   const uri = searchResult.uri;
   const isContext = uri.startsWith("spotify:playlist:") || uri.startsWith("spotify:album:") || uri.startsWith("spotify:artist:");
   const body: Record<string, unknown> = isContext ? { context_uri: uri } : { uris: [uri] };
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H1',location:'src/lib/spotify-client.ts:199',message:'spotify playOnDevice prepared request',data:{roomName:roomName ?? null,uri,name:searchResult.name,type:searchResult.type,isContext,bodyMode:isContext ? 'context_uri' : 'uris'},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   // Wake the target Sonos speaker so it registers with Spotify Connect
   try {
     const sonos = await import("@/lib/sonos-client");
     const speaker = sonos.findSpeaker(roomName);
     if (speaker) {
+      // #region agent log
+      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H1',location:'src/lib/spotify-client.ts:206',message:'spotify playOnDevice waking speaker via sonos.play',data:{speakerName:speaker.name,speakerIp:speaker.ip,roomName:roomName ?? null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       await sonos.play(speaker.name);
       await new Promise((r) => setTimeout(r, 3000));
     }
@@ -274,6 +280,9 @@ export async function addTrackRadioToQueue(
   if (!recRes.ok) return;
   const recData = (await recRes.json()) as { tracks?: Array<{ uri?: string }> };
   const uris = (recData.tracks ?? []).map((t) => t.uri).filter(Boolean) as string[];
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H2',location:'src/lib/spotify-client.ts:277',message:'spotify queued recommendations after track start',data:{trackUri,deviceId:deviceId ?? null,recommendationCount:uris.length,firstRecommendation:uris[0] ?? null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   const deviceParam = deviceId ? `&device_id=${encodeURIComponent(deviceId)}` : "";
   for (const uri of uris.slice(0, 15)) {

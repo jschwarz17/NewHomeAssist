@@ -146,6 +146,9 @@ async function resolveTargetIp(speakerIp: string): Promise<string> {
 export async function play(roomName?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H1',location:'src/lib/sonos-client.ts:149',message:'sonos play invoked',data:{roomName:roomName ?? null,speakerName:speaker.name,speakerIp:speaker.ip},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const ip = await resolveTargetIp(speaker.ip);
   await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
   return `Playing on ${speaker.name}`;
@@ -717,6 +720,9 @@ export async function playSpotifyRadio(spotifyUri: string, title: string, roomNa
   const svc = await getSpotifyServiceInfo(ip);
   const encodedUri = spotifyUri.replace(/:/g, "%3a");
   const radioUri = `x-sonosapi-radio:${encodedUri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
+  // #region agent log
+  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/lib/sonos-client.ts:719',message:'sonos playSpotifyRadio starting station',data:{roomName:roomName ?? null,speakerName:speaker.name,spotifyUri,title,radioUri},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const radioMeta =
     `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
