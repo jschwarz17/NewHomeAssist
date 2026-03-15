@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import type { SpeakerId, VoiceContextValue } from "@/types/voice";
+import { postDebugLog } from "@/lib/debug-log";
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
 
@@ -213,7 +214,7 @@ export function VoiceProvider({
               }
               const isContext = searchResult.type === "playlist" || searchResult.type === "album" || searchResult.type === "artist";
               // #region agent log
-              fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H2',location:'src/context/VoiceProvider.tsx:214',message:'voice playback search result',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,isContext},timestamp:Date.now()})}).catch(()=>{});
+              postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H2',location:'src/context/VoiceProvider.tsx:214',message:'voice playback search result',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,isContext},timestamp:Date.now()}, apiBaseUrl);
               // #endregion
               if (isContext) {
                 try {
@@ -236,6 +237,9 @@ export function VoiceProvider({
                 errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
               }
               try {
+                // #region agent log
+                postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/context/VoiceProvider.tsx:239',message:'voice playback attempting Sonos radio fallback',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type},timestamp:Date.now()}, apiBaseUrl);
+                // #endregion
                 return await sonos.playSpotifyRadio(searchResult.uri, searchResult.name, device);
               } catch {
                 // Radio failed, try direct track playback
@@ -248,7 +252,7 @@ export function VoiceProvider({
               return `Could not play "${searchResult.name}". ${errors.join(". ")}`;
             }
             // #region agent log
-            fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H5',location:'src/context/VoiceProvider.tsx:247',message:'voice playback fell back to sonos resume',data:{query,device,spotifyLoggedIn:false},timestamp:Date.now()})}).catch(()=>{});
+            postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H5',location:'src/context/VoiceProvider.tsx:247',message:'voice playback fell back to sonos resume',data:{query,device,spotifyLoggedIn:false},timestamp:Date.now()}, apiBaseUrl);
             // #endregion
             const sonosResult = await sonos.play(device);
             return `${sonosResult} — "${query}" (connect Spotify for full control)`;
@@ -455,6 +459,9 @@ export function VoiceProvider({
                       spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
                     } catch {
                       try {
+                        // #region agent log
+                        postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/context/VoiceProvider.tsx:458',message:'tasker playback attempting Sonos radio fallback',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type},timestamp:Date.now()}, apiBaseUrl);
+                        // #endregion
                         await sonos.playSpotifyRadio(searchResult.uri, searchResult.name, device);
                       } catch {
                         await sonos.playSpotify(searchResult.uri, searchResult.name, device);

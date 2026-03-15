@@ -1,3 +1,5 @@
+import { postDebugLog } from "@/lib/debug-log";
+
 /**
  * Grok Voice Agent realtime client: connect on wake word, stream mic, play Ara's voice.
  * Uses wss://api.x.ai/v1/realtime with ephemeral token and sec-websocket-protocol for browser.
@@ -267,7 +269,7 @@ export async function startGrokRealtimeVoice(
         const query = parsed.query || "Latin indie";
         const device = parsed.device || "living room";
         // #region agent log
-        fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H4',location:'src/lib/grok-realtime-voice.ts:267',message:'play_music tool args resolved',data:{query,device,rawQuery:parsed.query ?? null,rawDevice:parsed.device ?? null},timestamp:Date.now()})}).catch(()=>{});
+        postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H4',location:'src/lib/grok-realtime-voice.ts:267',message:'play_music tool args resolved',data:{query,device,rawQuery:parsed.query ?? null,rawDevice:parsed.device ?? null},timestamp:Date.now()}, apiBaseUrl);
         // #endregion
         if (onPlayMusic) {
           const result = await onPlayMusic(query, device);
