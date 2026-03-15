@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchCategoryArticles } from "@/lib/substack-rss";
+import { fetchSubstackArticles } from "@/lib/substack-rss";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -18,7 +18,7 @@ function json(data: object, status = 200) {
 
 export async function GET() {
   try {
-    const articles = await fetchCategoryArticles("Fintech");
+    const { fintech: articles } = await fetchSubstackArticles();
     const stories: Story[] = articles
       .slice(0, 5)
       .filter((a) => a.title && a.link)
