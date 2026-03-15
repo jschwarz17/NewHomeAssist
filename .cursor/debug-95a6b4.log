@@ -1,0 +1,1 @@
+{"sessionId":"95a6b4","hypothesisId":"A","location":"grok-realtime-voice.ts:handleFunctionCall","message":"tool called","data":{"name":"play_music","args":"{\"query\":\"Weezer\",\"device\":\"Living Room\"}"},"timestamp":1773526871841}

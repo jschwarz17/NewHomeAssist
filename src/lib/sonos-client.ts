@@ -383,6 +383,21 @@ export async function discoverFromDevice(ip: string): Promise<SonosSpeaker[]> {
 }
 
 /**
+ * Send a lightweight SOAP request to a speaker so it wakes up and registers
+ * with Spotify Connect. Call before polling Spotify Connect device list.
+ */
+export async function wakeSpeaker(roomName?: string): Promise<void> {
+  const speaker = findSpeaker(roomName);
+  if (!speaker) return;
+  try {
+    await soapRequest(
+      speaker.ip, AV_TRANSPORT_PATH, AV_TRANSPORT,
+      "GetTransportInfo", "<InstanceID>0</InstanceID>"
+    );
+  } catch { /* best-effort */ }
+}
+
+/**
  * Test if a speaker is reachable on port 1400.
  */
 export async function testConnection(ip: string): Promise<boolean> {

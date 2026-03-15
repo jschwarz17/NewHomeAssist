@@ -218,6 +218,10 @@ export function VoiceProvider({
               // #region agent log
               postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H2',location:'src/context/VoiceProvider.tsx:214',message:'voice playback search result',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,isContext},timestamp:Date.now()}, apiBaseUrl);
               // #endregion
+              if (device) {
+                await sonos.wakeSpeaker(device).catch(() => {});
+              }
+
               if (isContext) {
                 try {
                   return await spotify.playOnDevice(searchResult, device, apiBaseUrl);
@@ -228,6 +232,9 @@ export function VoiceProvider({
                   errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
                 }
                 try {
+                  // #region agent log
+                  postDebugLog({sessionId:'bc2603',runId:'downstairs-debug',hypothesisId:'H1',location:'VoiceProvider.tsx:context-sonos-fallback',message:'Falling to Sonos UPnP for context item',data:{query,device,uri:searchResult.uri},timestamp:Date.now()}, apiBaseUrl);
+                  // #endregion
                   return await sonos.playSpotify(searchResult.uri, searchResult.name, device, apiBaseUrl);
                 } catch (e) {
                   errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
