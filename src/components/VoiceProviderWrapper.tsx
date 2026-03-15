@@ -54,10 +54,10 @@ function VoiceProviderInner({
   useSpotifyDeepLink();
 
   const envUrl = process.env.NEXT_PUBLIC_ASSISTANT_API_URL;
-  const apiBaseUrl = Capacitor.isNativePlatform()
-    ? ANDROID_DEBUG_API_URL
-    : envUrl
-      ? `${envUrl.replace(/\/+$/, "")}/api`
+  const apiBaseUrl = envUrl
+    ? `${envUrl.replace(/\/+$/, "")}/api`
+    : Capacitor.isNativePlatform()
+      ? ANDROID_DEBUG_API_URL
       : "/api";
 
   return (
