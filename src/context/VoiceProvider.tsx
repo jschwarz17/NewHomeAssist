@@ -203,6 +203,9 @@ export function VoiceProvider({
           } catch {}
         },
         onPlayMusic: async (query, device) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H4',location:'VoiceProvider.tsx:onPlayMusic-entry',message:'onPlayMusic called',data:{query,device},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           const errors: string[] = [];
           try {
             const spotify = await import("@/lib/spotify-client");
@@ -216,6 +219,9 @@ export function VoiceProvider({
               }
               const isContext = searchResult.type === "playlist" || searchResult.type === "album" || searchResult.type === "artist";
               // #region agent log
+              fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H4',location:'VoiceProvider.tsx:after-search',message:'Search result and path decision',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,isContext,path:isContext?'context':'track'},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+              // #region agent log
               postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H2',location:'src/context/VoiceProvider.tsx:214',message:'voice playback search result',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,isContext},timestamp:Date.now()}, apiBaseUrl);
               // #endregion
               if (device) {
@@ -224,7 +230,11 @@ export function VoiceProvider({
 
               if (isContext) {
                 try {
-                  return await spotify.playOnDevice(searchResult, device, apiBaseUrl);
+                  const ctxResult = await spotify.playOnDevice(searchResult, device, apiBaseUrl);
+                  // #region agent log
+                  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H5',location:'VoiceProvider.tsx:context-connect-success',message:'Spotify Connect succeeded for context item',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,result:ctxResult},timestamp:Date.now()})}).catch(()=>{});
+                  // #endregion
+                  return ctxResult;
                 } catch (e) {
                   // #region agent log
                   postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/context/VoiceProvider.tsx:221',message:'voice playback Spotify Connect failed for context item',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
@@ -243,21 +253,33 @@ export function VoiceProvider({
               }
               try {
                 const result = await spotify.playOnDevice(searchResult, device, apiBaseUrl);
+                // #region agent log
+                fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H1',location:'VoiceProvider.tsx:track-connect-success',message:'Spotify Connect succeeded for track',data:{query,device,uri:searchResult.uri,name:searchResult.name,result},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
                 spotify.setRepeatOff(apiBaseUrl).catch(() => {});
                 await Promise.race([
                   spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl),
                   new Promise((r) => setTimeout(r, 5000)),
                 ]);
+                // #region agent log
+                try {
+                  const sonosCheck = await import("@/lib/sonos-client");
+                  const statuses = await sonosCheck.getPlayingStatus();
+                  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H1',location:'VoiceProvider.tsx:track-connect-verify',message:'Sonos state after Spotify Connect track play',data:{query,device,allStatuses:statuses},timestamp:Date.now()})}).catch(()=>{});
+                } catch(verr) {
+                  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H1',location:'VoiceProvider.tsx:track-connect-verify-err',message:'Failed to verify Sonos state',data:{error:verr instanceof Error ? verr.message : String(verr)},timestamp:Date.now()})}).catch(()=>{});
+                }
+                // #endregion
                 return result;
               } catch (e) {
                 // #region agent log
-                postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/context/VoiceProvider.tsx:236',message:'voice playback Spotify Connect failed for track',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
+                fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H1',location:'VoiceProvider.tsx:track-connect-failed',message:'Spotify Connect FAILED for track - falling to Sonos',data:{query,device,uri:searchResult.uri,name:searchResult.name,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()})}).catch(()=>{});
                 // #endregion
                 errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
               }
               try {
                 // #region agent log
-                postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/context/VoiceProvider.tsx:239',message:'voice playback attempting Sonos radio fallback',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type},timestamp:Date.now()}, apiBaseUrl);
+                fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H3',location:'VoiceProvider.tsx:track-radio-attempt',message:'Attempting Sonos radio fallback for track',data:{query,device,uri:searchResult.uri},timestamp:Date.now()})}).catch(()=>{});
                 // #endregion
                 return await sonos.playSpotifyRadio(searchResult.uri, searchResult.name, device, apiBaseUrl);
               } catch (e) {

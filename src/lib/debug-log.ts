@@ -1,5 +1,5 @@
 const DEBUG_ENDPOINT = "http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33";
-const DEBUG_SESSION_ID = "915513";
+const DEBUG_SESSION_ID = "0ba768";
 
 export interface DebugLogPayload {
   sessionId: string;

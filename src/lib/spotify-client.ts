@@ -294,6 +294,13 @@ export async function playOnDevice(
     throw new Error(`Spotify play failed (${res.status})`);
   }
 
+  // #region agent log
+  try {
+    const playerRes = await fetch(`${SPOTIFY_API}/me/player`, { headers: { Authorization: `Bearer ${token}` } });
+    const playerData = playerRes.ok ? await playerRes.json() : null;
+    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0ba768'},body:JSON.stringify({sessionId:'0ba768',runId:'song-debug',hypothesisId:'H2',location:'spotify-client.ts:playOnDevice-done',message:'Spotify player state after play',data:{roomName:roomName??null,targetDeviceName:targetDevice.name,targetDeviceId:targetDevice.id,isPlaying:playerData?.is_playing,deviceName:playerData?.device?.name,deviceId:playerData?.device?.id,deviceActive:playerData?.device?.is_active,trackName:playerData?.item?.name,trackUri:playerData?.item?.uri},timestamp:Date.now()})}).catch(()=>{});
+  } catch(e) {}
+  // #endregion
   return `Playing "${searchResult.name}" on ${targetDevice.name}`;
 }
 
