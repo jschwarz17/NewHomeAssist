@@ -6,6 +6,7 @@ interface Quote {
   symbol: string;
   price: string;
   change?: string;
+  logoUrl?: string;
 }
 
 const PLACEHOLDER: Quote[] = [
@@ -47,9 +48,21 @@ export function StockPricesWidget() {
       ) : null}
       <ul className="space-y-2">
         {quotes.map((q) => (
-          <li key={q.symbol} className="flex justify-between items-baseline text-sm">
-            <span className="text-zinc-400">{q.symbol}</span>
-            <span className="text-white font-mono">{q.price}</span>
+          <li key={q.symbol} className="flex justify-between items-center gap-2 text-sm">
+            <span className="flex items-center gap-2 min-w-0">
+              {q.logoUrl ? (
+                <img
+                  src={q.logoUrl}
+                  alt=""
+                  className="h-6 w-6 shrink-0 rounded object-contain bg-zinc-800"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+              ) : null}
+              <span className="text-zinc-400 truncate">{q.symbol}</span>
+            </span>
+            <span className="text-white font-mono shrink-0">{q.price}</span>
           </li>
         ))}
       </ul>

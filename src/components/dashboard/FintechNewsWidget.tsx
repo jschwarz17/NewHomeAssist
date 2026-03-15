@@ -35,9 +35,7 @@ export function FintechNewsWidget() {
       {loading ? (
         <p className="text-sm text-zinc-500">Loading…</p>
       ) : stories.length === 0 ? (
-        <p className="text-sm text-zinc-500">
-          In .env.local set NEXT_PUBLIC_ASSISTANT_API_URL to your Vercel URL, then rebuild. On Vercel, set NEWS_API_KEY.
-        </p>
+        <p className="text-sm text-zinc-500">No fintech articles available right now.</p>
       ) : (
         <ul className="space-y-2">
           {stories.map((s, i) => (

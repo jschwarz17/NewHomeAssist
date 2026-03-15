@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchCategoryArticles } from "@/lib/substack-rss";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,22 +17,13 @@ function json(data: object, status = 200) {
 }
 
 export async function GET() {
-  const key = process.env.NEWS_API_KEY ?? "";
-  if (!key) {
-    return json({ error: "NEWS_API_KEY not set", stories: [] });
-  }
   try {
-    const res = await fetch(
-      "https://newsapi.org/v2/top-headlines?category=business&country=us&pageSize=5&apiKey=" + key,
-      { next: { revalidate: 300 } }
-    );
-    if (!res.ok) return json({ stories: [] });
-    const data = await res.json();
-    const list = (data.articles ?? [])
-      .filter((a: { title?: string; url?: string }) => a.title && a.url)
-      .slice(0, 3)
-      .map((a: { title: string; url: string }) => ({ title: a.title, url: a.url })) as Story[];
-    return json({ stories: list });
+    const articles = await fetchCategoryArticles("Fintech");
+    const stories: Story[] = articles
+      .slice(0, 5)
+      .filter((a) => a.title && a.link)
+      .map((a) => ({ title: a.title, url: a.link }));
+    return json({ stories });
   } catch {
     return json({ stories: [] });
   }

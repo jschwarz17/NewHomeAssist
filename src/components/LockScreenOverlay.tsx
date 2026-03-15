@@ -31,10 +31,10 @@ export function LockScreenOverlay({ visible, onClose }: LockScreenOverlayProps) 
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center touch-none select-none"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center touch-none select-none"
+      style={{ touchAction: "pan-y", backgroundColor: "#0a0a0a" }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
-      style={{ touchAction: "pan-y" }}
     >
       <div className="flex-1 flex items-center justify-center w-full px-6">
         <img

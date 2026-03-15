@@ -9,10 +9,11 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+// Use ETFs for indices so Alpha Vantage GLOBAL_QUOTE returns data (SPY ≈ S&P 500, QQQ ≈ NASDAQ-100)
 const SYMBOLS = [
-  { symbol: "CFG", label: "CFG" },
-  { symbol: "IXIC", label: "NASDAQ" },
-  { symbol: "SPX", label: "S&P 500" },
+  { symbol: "CFG", label: "CFG", logoUrl: "https://logo.clearbit.com/citizensbank.com" },
+  { symbol: "QQQ", label: "NASDAQ", logoUrl: "https://logo.clearbit.com/nasdaq.com" },
+  { symbol: "SPY", label: "S&P 500", logoUrl: "https://logo.clearbit.com/ssga.com" },
 ] as const;
 
 function json(data: object, status = 200) {
@@ -24,25 +25,31 @@ export async function GET() {
   if (!key) {
     return json({ error: "ALPHA_VANTAGE_KEY not set", quotes: [] });
   }
-  const quotes: { symbol: string; price: string; change?: string }[] = [];
-  for (const { symbol, label } of SYMBOLS) {
-    try {
-      const res = await fetch(
-        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`,
-        { next: { revalidate: 60 } }
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      const q = data["Global Quote"];
-      if (q?.["05. price"]) {
-        const price = Number(q["05. price"]).toFixed(2);
-        const change = q["10. change percent"] ? `${q["10. change percent"]}%` : undefined;
-        quotes.push({ symbol: label, price, change });
+  const quotes: { symbol: string; price: string; change?: string; logoUrl?: string }[] = [];
+  const results = await Promise.all(
+    SYMBOLS.map(async ({ symbol, label }) => {
+      try {
+        const res = await fetch(
+          `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${key}`,
+          { next: { revalidate: 60 } }
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        const q = data["Global Quote"];
+        if (q?.["05. price"]) {
+          const price = Number(q["05. price"]).toFixed(2);
+          const change = q["10. change percent"] ? `${q["10. change percent"]}%` : undefined;
+          return { symbol: label, price, change, logoUrl: SYMBOLS.find((s) => s.label === label)?.logoUrl };
+        }
+      } catch {
+        // skip
       }
-    } catch {
-      // skip
-    }
-  }
+      return null;
+    })
+  );
+  results.forEach((r) => {
+    if (r) quotes.push(r);
+  });
   return json({ quotes });
 }
 

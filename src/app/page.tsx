@@ -42,14 +42,14 @@ export default function HomePage() {
             href="/shows"
             className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-3 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex flex-col items-center justify-center gap-1.5 leading-tight min-h-[80px]"
           >
-            <img src="/icons/icon-movies.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
+            <img src="/icons/icon-artists.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
             Movies &amp; Shows
           </Link>
           <Link
             href="/artists"
             className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-3 text-[11px] font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 active:bg-zinc-700 transition-colors text-center flex flex-col items-center justify-center gap-1.5 leading-tight min-h-[80px]"
           >
-            <img src="/icons/icon-artists.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
+            <img src="/icons/icon-movies.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
             Artists
           </Link>
           <Link
