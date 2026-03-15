@@ -1,4 +1,5 @@
 import { postDebugLog } from "@/lib/debug-log";
+import { acquireAraVoice, releaseAraVoice } from "@/lib/ara-audio-lock";
 
 /**
  * Grok Voice Agent realtime client: connect on wake word, stream mic, play Ara's voice.
@@ -51,6 +52,9 @@ const PLAY_MUSIC_TOOL = {
   name: "play_music",
   description:
     "Play music on ONE Sonos speaker only. Call when the user says 'play...', 'put on...', 'I want to listen to...', or names an artist/song/playlist.\n\n" +
+    "CRITICAL — Query: When the user names ONLY an artist (no specific song), pass ONLY the artist name as query — do NOT add song titles, album names, or other embellishments. " +
+    "For example, if the user says 'play Gin Blossoms', pass query='Gin Blossoms', NOT 'Hey Jealousy by Gin Blossoms'. " +
+    "This ensures the system starts an artist radio station instead of a single track.\n\n" +
     "CRITICAL — Location: If the user names a room or location (e.g. 'play X downstairs', 'in the living room', 'on the kitchen speaker', 'in the bedroom'), you MUST pass that exact location as 'device'. Play ONLY on that speaker; do not default to Living Room. " +
     "If no room is specified, then default to 'Living Room'.\n" +
     "Available speakers: Living Room, Downstairs, Guest Bathroom, Master Bathroom (or whatever room names the user uses — match their words).\n" +
@@ -60,7 +64,7 @@ const PLAY_MUSIC_TOOL = {
     properties: {
       query: {
         type: "string",
-        description: "What music to play — artist, song, genre, playlist name, or mood. Default: 'Latin indie'",
+        description: "What music to play — artist, song, genre, playlist name, or mood. When the user names only an artist, pass ONLY the artist name. Default: 'Latin indie'",
       },
       device: {
         type: "string",
@@ -232,6 +236,7 @@ export async function startGrokRealtimeVoice(
   const stop = () => {
     if (closed) return;
     closed = true;
+    releaseAraVoice(stop);
     try {
       ws.close();
     } catch {}
@@ -243,6 +248,8 @@ export async function startGrokRealtimeVoice(
       outputContext?.close();
     } catch {}
   };
+
+  acquireAraVoice(stop);
 
   function respondToFunctionCall(callId: string, output: object) {
     ws.send(JSON.stringify({

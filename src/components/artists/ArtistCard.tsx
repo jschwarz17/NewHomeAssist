@@ -184,7 +184,7 @@ export function ArtistCard({
                 </button>
               )}
             </div>
-            {hasSpotifyWidget && (
+            {hasSpotifyWidget && isSelected && (
               <iframe
                 src={
                   spotifyTrackId

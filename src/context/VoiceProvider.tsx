@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import type { SpeakerId, VoiceContextValue } from "@/types/voice";
 import { postDebugLog } from "@/lib/debug-log";
+import { stopActiveAraVoice } from "@/lib/ara-audio-lock";
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
 
@@ -91,6 +92,7 @@ export function VoiceProvider({
       const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
 
       const keywordDetectionCallback = () => {
+        stopActiveAraVoice();
         setWakeWordDetected(true);
         startGrokVoiceSession();
       };
@@ -220,10 +222,13 @@ export function VoiceProvider({
                 try {
                   return await spotify.playOnDevice(searchResult, device, apiBaseUrl);
                 } catch (e) {
+                  // #region agent log
+                  postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/context/VoiceProvider.tsx:221',message:'voice playback Spotify Connect failed for context item',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
+                  // #endregion
                   errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
                 }
                 try {
-                  return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                  return await sonos.playSpotify(searchResult.uri, searchResult.name, device, apiBaseUrl);
                 } catch (e) {
                   errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
                 }
@@ -231,22 +236,34 @@ export function VoiceProvider({
               }
               try {
                 const result = await spotify.playOnDevice(searchResult, device, apiBaseUrl);
-                spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
+                spotify.setRepeatOff(apiBaseUrl).catch(() => {});
+                await Promise.race([
+                  spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl),
+                  new Promise((r) => setTimeout(r, 5000)),
+                ]);
                 return result;
               } catch (e) {
+                // #region agent log
+                postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/context/VoiceProvider.tsx:236',message:'voice playback Spotify Connect failed for track',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
+                // #endregion
                 errors.push(`Connect: ${e instanceof Error ? e.message : String(e)}`);
               }
               try {
                 // #region agent log
                 postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/context/VoiceProvider.tsx:239',message:'voice playback attempting Sonos radio fallback',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type},timestamp:Date.now()}, apiBaseUrl);
                 // #endregion
-                return await sonos.playSpotifyRadio(searchResult.uri, searchResult.name, device);
-              } catch {
-                // Radio failed, try direct track playback
+                return await sonos.playSpotifyRadio(searchResult.uri, searchResult.name, device, apiBaseUrl);
+              } catch (e) {
+                // #region agent log
+                postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/context/VoiceProvider.tsx:242',message:'voice playback Sonos radio fallback failed',data:{query,device,uri:searchResult.uri,name:searchResult.name,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
+                // #endregion
               }
               try {
-                return await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                return await sonos.playSpotify(searchResult.uri, searchResult.name, device, apiBaseUrl);
               } catch (e) {
+                // #region agent log
+                postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H7',location:'src/context/VoiceProvider.tsx:247',message:'voice playback Sonos direct track fallback failed',data:{query,device,uri:searchResult.uri,name:searchResult.name,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
+                // #endregion
                 errors.push(`UPnP: ${e instanceof Error ? e.message : String(e)}`);
               }
               return `Could not play "${searchResult.name}". ${errors.join(". ")}`;
@@ -254,8 +271,12 @@ export function VoiceProvider({
             // #region agent log
             postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H5',location:'src/context/VoiceProvider.tsx:247',message:'voice playback fell back to sonos resume',data:{query,device,spotifyLoggedIn:false},timestamp:Date.now()}, apiBaseUrl);
             // #endregion
+            const isGenericQuery = !query || query.toLowerCase() === "latin indie" || query.toLowerCase() === "play music" || query.toLowerCase() === "music";
+            if (!isGenericQuery) {
+              return `Connect Spotify in settings to play "${query}".`;
+            }
             const sonosResult = await sonos.play(device);
-            return `${sonosResult} — "${query}" (connect Spotify for full control)`;
+            return `${sonosResult} (connect Spotify for full control)`;
           } catch (e) {
             return e instanceof Error ? e.message : "Could not play music";
           }
@@ -450,25 +471,43 @@ export function VoiceProvider({
                   if (isContext) {
                     try {
                       await spotify.playOnDevice(searchResult, device, apiBaseUrl);
-                    } catch {
-                      await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                    } catch (e) {
+                      // #region agent log
+                      postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/context/VoiceProvider.tsx:456',message:'tasker playback Spotify Connect failed for context item',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
+                      // #endregion
+                      await sonos.playSpotify(searchResult.uri, searchResult.name, device, apiBaseUrl);
                     }
                   } else {
                     try {
                       await spotify.playOnDevice(searchResult, device, apiBaseUrl);
-                      spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl).catch(() => {});
-                    } catch {
+                      spotify.setRepeatOff(apiBaseUrl).catch(() => {});
+                      await Promise.race([
+                        spotify.addTrackRadioToQueue(searchResult.uri, apiBaseUrl),
+                        new Promise((r) => setTimeout(r, 5000)),
+                      ]);
+                    } catch (e) {
+                      // #region agent log
+                      postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/context/VoiceProvider.tsx:463',message:'tasker playback Spotify Connect failed for track',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
+                      // #endregion
                       try {
                         // #region agent log
                         postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/context/VoiceProvider.tsx:458',message:'tasker playback attempting Sonos radio fallback',data:{query,device,uri:searchResult.uri,name:searchResult.name,type:searchResult.type},timestamp:Date.now()}, apiBaseUrl);
                         // #endregion
-                        await sonos.playSpotifyRadio(searchResult.uri, searchResult.name, device);
-                      } catch {
-                        await sonos.playSpotify(searchResult.uri, searchResult.name, device);
+                        await sonos.playSpotifyRadio(searchResult.uri, searchResult.name, device, apiBaseUrl);
+                      } catch (radioError) {
+                        // #region agent log
+                        postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/context/VoiceProvider.tsx:468',message:'tasker playback Sonos radio fallback failed',data:{query,device,uri:searchResult.uri,name:searchResult.name,error:radioError instanceof Error ? radioError.message : String(radioError)},timestamp:Date.now()}, apiBaseUrl);
+                        // #endregion
+                        await sonos.playSpotify(searchResult.uri, searchResult.name, device, apiBaseUrl);
                       }
                     }
                   }
                 } else {
+                  const isGenericQuery = !query || query.toLowerCase() === "latin indie" || query.toLowerCase() === "play music" || query.toLowerCase() === "music";
+                  if (!isGenericQuery) {
+                    setError(`Connect Spotify in settings to play "${query}".`);
+                    continue;
+                  }
                   await sonos.play(device);
                 }
               } catch (e) {

@@ -3,6 +3,8 @@
  * Same pipeline as the main voice session, so it works on Android where Ara's voice already works.
  */
 
+import { acquireAraVoice, releaseAraVoice } from "@/lib/ara-audio-lock";
+
 const WS_URL = "wss://api.x.ai/v1/realtime";
 const SAMPLE_RATE = 24000;
 
@@ -43,6 +45,7 @@ export function speakWithAraRealtime(options: AraReadAloudOptions): Promise<void
     const stop = (err?: unknown) => {
       if (closed) return;
       closed = true;
+      releaseAraVoice(stopForLock);
       try {
         ws.close();
       } catch {}
@@ -52,6 +55,9 @@ export function speakWithAraRealtime(options: AraReadAloudOptions): Promise<void
       if (err != null) reject(err);
       else resolve();
     };
+
+    const stopForLock = () => stop(new DOMException("Preempted by another Ara session", "AbortError"));
+    acquireAraVoice(stopForLock);
 
     if (signal) {
       signal.addEventListener("abort", () => stop(new DOMException("Aborted", "AbortError")));

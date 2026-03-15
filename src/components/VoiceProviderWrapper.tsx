@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
 import { VoiceProvider } from "@/context/VoiceProvider";
 import { YouTubeProvider, useYouTube } from "@/context/YouTubeContext";
 import { YouTubeOverlay } from "@/components/YouTubeOverlay";
 import { ShowsProvider } from "@/context/ShowsContext";
 import { ArtistsProvider } from "@/context/ArtistsContext";
 import { SubstackProvider } from "@/context/SubstackContext";
+
+const ANDROID_DEBUG_API_URL = "http://192.168.1.36:3000/api";
 
 function useSpotifyDeepLink() {
   useEffect(() => {
@@ -51,9 +54,11 @@ function VoiceProviderInner({
   useSpotifyDeepLink();
 
   const envUrl = process.env.NEXT_PUBLIC_ASSISTANT_API_URL;
-  const apiBaseUrl = envUrl
-    ? `${envUrl.replace(/\/+$/, "")}/api`
-    : "/api";
+  const apiBaseUrl = Capacitor.isNativePlatform()
+    ? ANDROID_DEBUG_API_URL
+    : envUrl
+      ? `${envUrl.replace(/\/+$/, "")}/api`
+      : "/api";
 
   return (
     <VoiceProvider

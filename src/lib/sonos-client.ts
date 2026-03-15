@@ -4,6 +4,8 @@
  * Speaker IPs are stored in localStorage.
  */
 
+import { postDebugLog } from "@/lib/debug-log";
+
 const SONOS_PORT = 1400;
 const STORAGE_KEY = "sonos_speakers";
 
@@ -141,6 +143,48 @@ async function resolveTargetIp(speakerIp: string): Promise<string> {
   const standalone = await ensureStandalone(speakerIp);
   if (standalone) return speakerIp;
   return resolveCoordinator(speakerIp);
+}
+
+async function logPlaybackSnapshot(
+  ip: string,
+  roomName: string | undefined,
+  speakerName: string,
+  apiBaseUrl: string | undefined,
+  context: string
+): Promise<void> {
+  try {
+    const [transportXml, mediaXml, positionXml, volumeXml] = await Promise.all([
+      soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetTransportInfo", "<InstanceID>0</InstanceID>").catch(() => ""),
+      soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetMediaInfo", "<InstanceID>0</InstanceID>").catch(() => ""),
+      soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "GetPositionInfo", "<InstanceID>0</InstanceID>").catch(() => ""),
+      soapRequest(
+        ip,
+        RENDERING_CONTROL_PATH,
+        RENDERING_CONTROL,
+        "GetVolume",
+        "<InstanceID>0</InstanceID><Channel>Master</Channel>"
+      ).catch(() => ""),
+    ]);
+
+    const transportDec = transportXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const mediaDec = mediaXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const positionDec = positionXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    const volumeDec = volumeXml.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+
+    const transportState = transportDec.match(/<CurrentTransportState>([^<]*)<\/CurrentTransportState>/)?.[1] ?? "";
+    const currentUri = mediaDec.match(/<CurrentURI>([^<]*)<\/CurrentURI>/)?.[1] ?? "";
+    const trackUri = positionDec.match(/<TrackURI>([^<]*)<\/TrackURI>/)?.[1] ?? "";
+    const trackTitle = positionDec.match(/<dc:title>([^<]*)<\/dc:title>/)?.[1] ?? "";
+    const volume = volumeDec.match(/<CurrentVolume>([^<]*)<\/CurrentVolume>/)?.[1] ?? "";
+
+    // #region agent log
+    postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H8',location:'src/lib/sonos-client.ts:164',message:'sonos playback snapshot',data:{context,roomName:roomName ?? null,speakerName,targetIp:ip,transportState,currentUri,trackUri,trackTitle,volume},timestamp:Date.now()}, apiBaseUrl);
+    // #endregion
+  } catch (e) {
+    // #region agent log
+    postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H8',location:'src/lib/sonos-client.ts:167',message:'sonos playback snapshot failed',data:{context,roomName:roomName ?? null,speakerName,targetIp:ip,error:e instanceof Error ? e.message : String(e)},timestamp:Date.now()}, apiBaseUrl);
+    // #endregion
+  }
 }
 
 export async function play(roomName?: string): Promise<string> {
@@ -601,7 +645,7 @@ async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
  * Play a Spotify URI on a Sonos speaker.
  * Tries multiple URI formats for compatibility across Sonos firmware versions.
  */
-export async function playSpotify(spotifyUri: string, title: string, roomName?: string): Promise<string> {
+export async function playSpotify(spotifyUri: string, title: string, roomName?: string, apiBaseUrl?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured. Add a speaker IP in settings.");
 
@@ -609,6 +653,11 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
   const svc = await getSpotifyServiceInfo(ip);
 
   console.log(`[sonos] playSpotify: target=${ip} speaker=${speaker.name} (${speaker.ip}) uri=${spotifyUri}`);
+  // #region agent log
+  postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H7',location:'src/lib/sonos-client.ts:611',message:'sonos playSpotify starting direct track playback',data:{roomName:roomName ?? null,speakerName:speaker.name,targetIp:ip,spotifyUri,title},timestamp:Date.now()}, apiBaseUrl);
+  // #endregion
+
+  await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Stop", "<InstanceID>0</InstanceID>").catch(() => {});
 
   if (spotifyUri.startsWith("spotify:artist:")) {
     const encodedUri = spotifyUri.replace(/:/g, "%3a");
@@ -679,6 +728,9 @@ export async function playSpotify(spotifyUri: string, title: string, roomName?: 
     errors.push(`attempt3: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // #region agent log
+  postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H7',location:'src/lib/sonos-client.ts:682',message:'sonos playSpotify exhausted all attempts',data:{roomName:roomName ?? null,speakerName:speaker.name,targetIp:ip,spotifyUri,title,errors},timestamp:Date.now()}, apiBaseUrl);
+  // #endregion
   throw new Error(`All playback attempts failed on ${speaker.name}. ${errors.join(" | ")}`);
 }
 
@@ -713,15 +765,16 @@ function escapeXml(s: string): string {
  * Start a Spotify radio station on Sonos based on any Spotify URI (track, artist, etc.).
  * Sonos handles continuous playback natively via x-sonosapi-radio.
  */
-export async function playSpotifyRadio(spotifyUri: string, title: string, roomName?: string): Promise<string> {
+export async function playSpotifyRadio(spotifyUri: string, title: string, roomName?: string, apiBaseUrl?: string): Promise<string> {
   const speaker = findSpeaker(roomName);
   if (!speaker) throw new Error("No Sonos speakers configured.");
   const ip = await resolveTargetIp(speaker.ip);
   const svc = await getSpotifyServiceInfo(ip);
+  await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Stop", "<InstanceID>0</InstanceID>").catch(() => {});
   const encodedUri = spotifyUri.replace(/:/g, "%3a");
   const radioUri = `x-sonosapi-radio:${encodedUri}?sid=${svc.sid}&flags=8300&sn=${svc.sn}`;
   // #region agent log
-  fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'915513'},body:JSON.stringify({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/lib/sonos-client.ts:719',message:'sonos playSpotifyRadio starting station',data:{roomName:roomName ?? null,speakerName:speaker.name,spotifyUri,title,radioUri},timestamp:Date.now()})}).catch(()=>{});
+  postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/lib/sonos-client.ts:719',message:'sonos playSpotifyRadio starting station',data:{roomName:roomName ?? null,speakerName:speaker.name,targetIp:ip,spotifyUri,title,radioUri},timestamp:Date.now()}, apiBaseUrl);
   // #endregion
   const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const radioMeta =
@@ -735,6 +788,13 @@ export async function playSpotifyRadio(spotifyUri: string, title: string, roomNa
     ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "SetAVTransportURI",
     `<InstanceID>0</InstanceID><CurrentURI>${escapeXml(radioUri)}</CurrentURI><CurrentURIMetaData>${escapeXml(radioMeta)}</CurrentURIMetaData>`
   );
+  // #region agent log
+  postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/lib/sonos-client.ts:737',message:'sonos playSpotifyRadio set transport uri succeeded',data:{roomName:roomName ?? null,speakerName:speaker.name,targetIp:ip,spotifyUri,title},timestamp:Date.now()}, apiBaseUrl);
+  // #endregion
   await soapRequest(ip, AV_TRANSPORT_PATH, AV_TRANSPORT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>");
+  // #region agent log
+  postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H3',location:'src/lib/sonos-client.ts:740',message:'sonos playSpotifyRadio play command succeeded',data:{roomName:roomName ?? null,speakerName:speaker.name,targetIp:ip,spotifyUri,title},timestamp:Date.now()}, apiBaseUrl);
+  // #endregion
+  await logPlaybackSnapshot(ip, roomName, speaker.name, apiBaseUrl, "after playSpotifyRadio");
   return `Playing "${title}" radio on ${speaker.name}`;
 }

@@ -73,6 +73,14 @@ export interface SpotifySearchResult {
   type: "track" | "album" | "playlist" | "artist";
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * Search Spotify and return the best matching item.
  * Prioritizes playlists for vague/genre queries, tracks for specific artists/songs.
@@ -97,6 +105,7 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
   const artist = data.artists?.items?.[0];
 
   const lowerQuery = query.toLowerCase();
+  const normalizedQuery = normalizeSearchText(query);
   const isGenreOrMood = ["music", "something", "anything", "chill", "party", "workout",
     "indie", "jazz", "rock", "pop", "latin", "classical", "hip hop", "r&b", "country",
     "electronic", "reggaeton", "salsa", "bachata", "ambient", "lofi", "lo-fi", "focus",
@@ -109,8 +118,15 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
   }
 
   const isArtistRadio = /\bradio\b/i.test(lowerQuery);
-  if (artist && (lowerQuery.includes(artist.name.toLowerCase()) || isArtistRadio)) {
-    if (isArtistRadio) {
+  const normalizedArtist = artist ? normalizeSearchText(artist.name) : "";
+  const looksLikeArtistOnly = artist
+    ? normalizedQuery === normalizedArtist ||
+      normalizedArtist.startsWith(normalizedQuery) ||
+      normalizedQuery.startsWith(normalizedArtist) ||
+      normalizedArtist.includes(normalizedQuery)
+    : false;
+  if (artist && (lowerQuery.includes(artist.name.toLowerCase()) || isArtistRadio || looksLikeArtistOnly)) {
+    if (isArtistRadio || looksLikeArtistOnly) {
       return { uri: artist.uri, name: artist.name, type: "artist" };
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,6 +144,9 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
   }
 
   if (artist) {
+    if (looksLikeArtistOnly) {
+      return { uri: artist.uri, name: artist.name, type: "artist" };
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const artistTrack = data.tracks?.items?.find((t: any) =>
       t.artists?.some((a: any) => a.id === artist.id)
@@ -203,36 +222,41 @@ export async function playOnDevice(
   postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H1',location:'src/lib/spotify-client.ts:199',message:'spotify playOnDevice prepared request',data:{roomName:roomName ?? null,uri,name:searchResult.name,type:searchResult.type,isContext,bodyMode:isContext ? 'context_uri' : 'uris'},timestamp:Date.now()}, apiBaseUrl);
   // #endregion
 
-  // Wake the target Sonos speaker so it registers with Spotify Connect
-  try {
-    const sonos = await import("@/lib/sonos-client");
-    const speaker = sonos.findSpeaker(roomName);
-    if (speaker) {
-      // #region agent log
-      postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H1',location:'src/lib/spotify-client.ts:206',message:'spotify playOnDevice waking speaker via sonos.play',data:{speakerName:speaker.name,speakerIp:speaker.ip,roomName:roomName ?? null},timestamp:Date.now()}, apiBaseUrl);
-      // #endregion
-      await sonos.play(speaker.name);
-      await new Promise((r) => setTimeout(r, 3000));
-    }
-  } catch { /* speaker wake failed, continue anyway */ }
-
   // Poll for a Speaker-type device only (never phones/computers)
   let targetDevice: SpotifyDevice | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
     const devices = await getDevices(token);
     const speakers = devices.filter((d) => d.type === "Speaker");
     if (speakers.length) {
-      const lower = (roomName ?? "").toLowerCase();
-      targetDevice = speakers.find((d) => d.name.toLowerCase().includes(lower))
-        ?? speakers[0];
-      break;
+      if (roomName) {
+        const lower = roomName.toLowerCase();
+        const match = speakers.find((d) => d.name.toLowerCase().includes(lower));
+        if (match) {
+          targetDevice = match;
+          break;
+        }
+      } else {
+        targetDevice = speakers[0];
+        break;
+      }
     }
     if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
   }
 
+  if (roomName && !targetDevice) {
+    throw new Error(`Speaker "${roomName}" not found in Spotify Connect. Falling back to direct control.`);
+  }
+
   if (!targetDevice) {
+    // #region agent log
+    postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/lib/spotify-client.ts:233',message:'spotify playOnDevice found no speaker device',data:{roomName:roomName ?? null,uri,name:searchResult.name},timestamp:Date.now()}, apiBaseUrl);
+    // #endregion
     throw new Error("No Sonos speakers found in Spotify Connect. Falling back to direct control.");
   }
+
+  // #region agent log
+  postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/lib/spotify-client.ts:237',message:'spotify playOnDevice selected target device',data:{roomName:roomName ?? null,targetDeviceId:targetDevice.id,targetDeviceName:targetDevice.name,targetDeviceType:targetDevice.type},timestamp:Date.now()}, apiBaseUrl);
+  // #endregion
 
   const res = await fetch(`${SPOTIFY_API}/me/player/play?device_id=${targetDevice.id}`, {
     method: "PUT",
@@ -240,7 +264,15 @@ export async function playOnDevice(
     body: JSON.stringify(body),
   });
 
+  // #region agent log
+  postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/lib/spotify-client.ts:243',message:'spotify playOnDevice initial response',data:{roomName:roomName ?? null,status:res.status,ok:res.ok,targetDeviceName:targetDevice.name},timestamp:Date.now()}, apiBaseUrl);
+  // #endregion
+
   if (res.status === 404 || res.status === 502) {
+    await fetch(`${SPOTIFY_API}/me/player/pause?device_id=${targetDevice.id}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
     await fetch(`${SPOTIFY_API}/me/player`, {
       method: "PUT",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -252,6 +284,9 @@ export async function playOnDevice(
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    // #region agent log
+    postDebugLog({sessionId:'915513',runId:'voice-playback',hypothesisId:'H6',location:'src/lib/spotify-client.ts:255',message:'spotify playOnDevice retry response',data:{roomName:roomName ?? null,status:retry.status,ok:retry.ok,targetDeviceName:targetDevice.name},timestamp:Date.now()}, apiBaseUrl);
+    // #endregion
     if (!retry.ok && retry.status !== 204) {
       throw new Error(`Spotify play failed after transfer (${retry.status})`);
     }
@@ -300,3 +335,17 @@ export async function addTrackRadioToQueue(
   }
 }
 
+/**
+ * Turn off repeat mode on the active Spotify playback so single tracks don't loop.
+ */
+export async function setRepeatOff(apiBaseUrl: string): Promise<void> {
+  try {
+    const token = await getAccessToken(apiBaseUrl);
+    await fetch(`${SPOTIFY_API}/me/player/repeat?state=off`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    // Best-effort; don't block playback if this fails
+  }
+}
