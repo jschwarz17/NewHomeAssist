@@ -11,7 +11,7 @@ export function LayoutHeader() {
   if (isHome) return null;
 
   return (
-    <header className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
+    <header className="border-b border-zinc-800 px-6 pt-8 pb-4 flex items-center justify-between">
       <AppHeaderTitle />
       <Nav />
     </header>

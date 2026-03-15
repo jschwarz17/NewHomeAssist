@@ -181,13 +181,25 @@ export function ArtistsProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Kick off fetch immediately when provider mounts (app start)
+  // Kick off fetch immediately when provider mounts (app start / home dashboard)
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       fetchData();
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
+
+  // Preload artist images when data is ready so thumbnails load faster on artists page
+  useEffect(() => {
+    if (state.loading || !state.artists.length) return;
+    const urls = state.artists
+      .map((a) => a.imageUrl)
+      .filter((url): url is string => Boolean(url));
+    urls.slice(0, 24).forEach((url) => {
+      const img = new Image();
+      img.src = url;
+    });
+  }, [state.loading, state.artists]);
 
   const refresh = useCallback(() => {
     // Clear cache and re-fetch

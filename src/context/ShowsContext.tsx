@@ -208,13 +208,25 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Kick off fetch immediately when provider mounts (app start)
+  // Kick off fetch immediately when provider mounts (app start / home dashboard)
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       fetchData();
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
+
+  // Preload poster images when data is ready so thumbnails load faster on shows/movies page
+  useEffect(() => {
+    if (state.loading || (!state.shows.length && !state.movies.length)) return;
+    const urls: string[] = [];
+    state.shows.forEach((s) => { if (s.posterUrl) urls.push(s.posterUrl!); });
+    state.movies.forEach((m) => { if (m.posterUrl) urls.push(m.posterUrl!); });
+    urls.slice(0, 24).forEach((url) => {
+      const img = new Image();
+      img.src = url;
+    });
+  }, [state.loading, state.shows, state.movies]);
 
   const refresh = useCallback(() => {
     // Clear cache and re-fetch
