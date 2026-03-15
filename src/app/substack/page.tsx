@@ -154,28 +154,7 @@ export default function SubstackPage() {
       : `/api/substack/article-content/?url=${encodeURIComponent(article.link)}`;
     const response = await fetch(contentUrl, { cache: "no-store" });
 
-    // #region agent log
-    const rawBody = await response.text();
-    let data: { title?: string | null; content?: string; error?: string };
-    try {
-      data = JSON.parse(rawBody) as typeof data;
-    } catch (parseErr) {
-      const bodyStart = rawBody.trimStart().slice(0, 120);
-      fetch("http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "651c00" },
-        body: JSON.stringify({
-          sessionId: "651c00",
-          location: "substack/page.tsx:loadArticle",
-          message: "article-content response was not JSON",
-          data: { status: response.status, contentType: response.headers.get("content-type"), bodyStart },
-          timestamp: Date.now(),
-          hypothesisId: "A",
-        }),
-      }).catch(() => {});
-      throw new Error("Could not load the full article.");
-    }
-    // #endregion
+    const data = await response.json() as { title?: string | null; content?: string; error?: string };
 
     if (!response.ok) {
       throw new Error(data.error || "Could not load the full article.");

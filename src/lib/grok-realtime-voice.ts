@@ -251,10 +251,6 @@ export async function startGrokRealtimeVoice(
   }
 
   async function handleFunctionCall(name: string, callId: string, args: string) {
-    // #region agent log
-    console.error(`[ARA-DEBUG][A] handleFunctionCall called name=${name} args=${args.slice(0,200)}`);
-    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a6b4'},body:JSON.stringify({sessionId:'95a6b4',hypothesisId:'A',location:'grok-realtime-voice.ts:handleFunctionCall',message:'tool called',data:{name,args:args.slice(0,200)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     try {
       const parsed = JSON.parse(args);
 
@@ -321,16 +317,8 @@ export async function startGrokRealtimeVoice(
 
       if (name === "use_new_tools") {
         const question = parsed.question ?? "";
-        // #region agent log
-        console.error(`[ARA-DEBUG][A] use_new_tools triggered question="${question}" hasCallback=${!!onUseNewTools}`);
-        fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a6b4'},body:JSON.stringify({sessionId:'95a6b4',hypothesisId:'A',location:'grok-realtime-voice.ts:use_new_tools',message:'use_new_tools triggered',data:{question,hasCallback:!!onUseNewTools},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (question && onUseNewTools) {
           const result = await onUseNewTools(question);
-          // #region agent log
-          console.error(`[ARA-DEBUG][B] onUseNewTools result=${JSON.stringify(result).slice(0,200)}`);
-          fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'95a6b4'},body:JSON.stringify({sessionId:'95a6b4',hypothesisId:'B',location:'grok-realtime-voice.ts:use_new_tools_result',message:'onUseNewTools returned',data:{result},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           respondToFunctionCall(callId, result);
         } else {
           respondToFunctionCall(callId, { success: false, answer: "External tools are not available right now." });

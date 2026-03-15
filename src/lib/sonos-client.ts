@@ -590,10 +590,6 @@ async function getSpotifyServiceInfo(ip: string): Promise<SpotifyServiceInfo> {
     }
   } catch { /* not critical */ }
 
-  // #region agent log
-  console.log(`[sonos-debug] serviceInfo: sid=${info.sid} sn=${info.sn} token=${info.accountToken} rincon=${rincon}`);
-  // #endregion
-
   try { localStorage.setItem(SPOTIFY_SVC_CACHE_KEY, JSON.stringify(info)); } catch { /* ignore */ }
   return info;
 }

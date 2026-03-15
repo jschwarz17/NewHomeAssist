@@ -4,21 +4,6 @@
  * Uses Spotify Connect to play on Sonos speakers directly.
  */
 
-// #region agent log
-const DBG_KEY = 'ara_debug_fe7a63';
-function dbgLog(loc: string, msg: string, data: Record<string, unknown>) {
-  try {
-    const logs = JSON.parse(localStorage.getItem(DBG_KEY) || '[]');
-    logs.push({ t: Date.now(), loc, msg, data });
-    localStorage.setItem(DBG_KEY, JSON.stringify(logs));
-  } catch {}
-  try {
-    fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fe7a63'},body:JSON.stringify({sessionId:'fe7a63',location:loc,message:msg,data,timestamp:Date.now()})}).catch(()=>{});
-  } catch {}
-}
-export { DBG_KEY, dbgLog };
-// #endregion
-
 const STORAGE_KEY = "spotify_tokens";
 const SPOTIFY_API = "https://api.spotify.com/v1";
 
@@ -131,9 +116,6 @@ export async function search(query: string, apiBaseUrl: string): Promise<Spotify
       t.artists?.some((a: any) => a.id === artist.id)
     );
     if (artistTrack) {
-      // #region agent log
-      fetch('http://127.0.0.1:7941/ingest/682557f1-4c11-46b8-bba1-57fb1f47de33',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'69e7cc'},body:JSON.stringify({sessionId:'69e7cc',location:'spotify-client.ts:search',message:'search returned track for artist query',data:{query,artistName:artist.name,type:'track',uri:artistTrack.uri},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
       return { uri: artistTrack.uri, name: artistTrack.name, artist: artist.name, type: "track" };
     }
     return { uri: artist.uri, name: artist.name, type: "artist" };
@@ -281,91 +263,29 @@ export async function addTrackRadioToQueue(
   apiBaseUrl: string,
   deviceId?: string
 ): Promise<void> {
-  // #region agent log
-  dbgLog('addTrackRadioToQueue:entry', 'called', { trackUri, hasDeviceId: !!deviceId });
-  // #endregion
   const token = await getAccessToken(apiBaseUrl);
   const trackId = trackUri.replace("spotify:track:", "");
-  if (!trackId || trackId === trackUri) {
-    // #region agent log
-    dbgLog('addTrackRadioToQueue:badUri', 'not a track URI, aborting', { trackUri, trackId });
-    // #endregion
-    return;
-  }
+  if (!trackId || trackId === trackUri) return;
 
   const recRes = await fetch(
     `${SPOTIFY_API}/recommendations?seed_tracks=${encodeURIComponent(trackId)}&limit=20`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  // #region agent log
-  dbgLog('addTrackRadioToQueue:recResponse', 'recommendations API response', { status: recRes.status, ok: recRes.ok });
-  // #endregion
-  if (!recRes.ok) {
-    // #region agent log
-    let errBody = '';
-    try { errBody = await recRes.clone().text(); } catch {}
-    dbgLog('addTrackRadioToQueue:recFailed', 'recommendations API FAILED', { status: recRes.status, body: errBody.slice(0, 500) });
-    // #endregion
-    return;
-  }
+  if (!recRes.ok) return;
   const recData = (await recRes.json()) as { tracks?: Array<{ uri?: string }> };
   const uris = (recData.tracks ?? []).map((t) => t.uri).filter(Boolean) as string[];
-  // #region agent log
-  dbgLog('addTrackRadioToQueue:recParsed', 'recommendations parsed', { trackCount: recData.tracks?.length ?? 0, uriCount: uris.length, firstUri: uris[0] ?? null });
-  // #endregion
 
   const deviceParam = deviceId ? `&device_id=${encodeURIComponent(deviceId)}` : "";
-  let firstStatus: number | undefined;
-  let queuedOk = 0;
   for (const uri of uris.slice(0, 15)) {
     try {
       const qRes = await fetch(
         `${SPOTIFY_API}/me/player/queue?uri=${encodeURIComponent(uri)}${deviceParam}`,
         { method: "POST", headers: { Authorization: `Bearer ${token}` } }
       );
-      if (firstStatus === undefined) firstStatus = qRes.status;
-      if (!qRes.ok) {
-        // #region agent log
-        let qBody = '';
-        try { qBody = await qRes.clone().text(); } catch {}
-        dbgLog('addTrackRadioToQueue:queueFailed', 'queue POST failed', { status: qRes.status, body: qBody.slice(0, 300), uri });
-        // #endregion
-        break;
-      }
-      queuedOk++;
-    } catch (e) {
-      // #region agent log
-      dbgLog('addTrackRadioToQueue:queueError', 'queue POST threw', { error: e instanceof Error ? e.message : String(e) });
-      // #endregion
+      if (!qRes.ok) break;
+    } catch {
       break;
     }
   }
-  // #region agent log
-  dbgLog('addTrackRadioToQueue:done', 'finished', { firstStatus, queuedOk, totalUris: uris.length });
-  // #endregion
 }
 
-/**
- * Start a Spotify radio station on Sonos based on the current track.
- * Uses Sonos's native x-sonosapi-radio which handles continuous playback.
- */
-export async function startRadioOnSonos(
-  trackUri: string,
-  trackName: string,
-  roomName?: string
-): Promise<void> {
-  // #region agent log
-  dbgLog('startRadioOnSonos:entry', 'called', { trackUri, trackName, roomName });
-  // #endregion
-  const sonos = await import("@/lib/sonos-client");
-  try {
-    const result = await sonos.playSpotifyRadio(trackUri, trackName, roomName);
-    // #region agent log
-    dbgLog('startRadioOnSonos:ok', 'radio started', { result });
-    // #endregion
-  } catch (e) {
-    // #region agent log
-    dbgLog('startRadioOnSonos:failed', 'radio failed', { error: e instanceof Error ? e.message : String(e) });
-    // #endregion
-  }
-}

@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { LayoutHeader } from "@/components/LayoutHeader";
 import { VoiceProviderWrapper } from "@/components/VoiceProviderWrapper";
-// #region agent log
-import { DebugLogOverlay } from "@/components/DebugLogOverlay";
-// #endregion
 import "./globals.css";
 
 const geistSans = Geist({
@@ -37,9 +34,6 @@ export default function RootLayout({
             <LayoutHeader />
             {children}
           </div>
-          {/* #region agent log */}
-          <DebugLogOverlay />
-          {/* #endregion */}
         </VoiceProviderWrapper>
       </body>
     </html>

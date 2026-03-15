@@ -391,9 +391,6 @@ async function callRapidApi(
 export async function POST(req: NextRequest) {
   try {
     const { question } = await req.json();
-    // #region agent log
-    console.log(`[ARA-DEBUG][C] rapid-api-query received question="${question}"`);
-    // #endregion
     if (!question || typeof question !== "string") {
       return NextResponse.json({ success: false, error: "Missing question" }, { status: 400 });
     }
@@ -407,9 +404,6 @@ export async function POST(req: NextRequest) {
     const directRoute = DIRECT_ROUTES.find((r) => r.match.test(question));
 
     if (directRoute) {
-      // #region agent log
-      console.log(`[ARA-DEBUG][C] direct route matched slug=${directRoute.slug}`);
-      // #endregion
       let result: { ok: boolean; data?: unknown; error?: string };
       if (directRoute.callFn) {
         result = await directRoute.callFn(question);
@@ -417,10 +411,6 @@ export async function POST(req: NextRequest) {
         const { endpoint, method, params } = directRoute.build(question);
         result = await callRapidApi(rapidKey, directRoute.rapidapi_host, directRoute.base_url, endpoint, method, params);
       }
-
-      // #region agent log
-      console.log(`[ARA-DEBUG][D] RapidAPI result ok=${result.ok} slug=${directRoute.slug} error=${result.error ?? "none"}`);
-      // #endregion
 
       if (!result.ok) {
         return NextResponse.json({ success: false, answer: "The service returned an error. Try again later.", error: result.error });
@@ -449,10 +439,6 @@ export async function POST(req: NextRequest) {
     if (!services.length) {
       return NextResponse.json({ success: false, answer: "I don't have an external tool for that yet.", error: "no_services" });
     }
-
-    // #region agent log
-    console.log(`[ARA-DEBUG][C] no direct route — falling back to Claude routing`);
-    // #endregion
 
     const claude = new Anthropic({ apiKey: claudeKey });
     const catalog = buildCatalogPrompt(services);
@@ -489,10 +475,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, answer, service_used: routing.service_slug, routed_by: "claude" });
 
   } catch (err) {
-    // #region agent log
-    const errMsg = err instanceof Error ? `${err.message}\n${err.stack?.slice(0, 400)}` : String(err);
-    console.error("[rapid-api-query] Error:", errMsg);
-    // #endregion
+    const errMsg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
